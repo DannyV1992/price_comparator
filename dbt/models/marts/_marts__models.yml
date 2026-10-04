@@ -71,3 +71,15 @@ models:
     columns:
       - name: run_id
         data_tests: [unique, not_null]
+
+  - name: fct_daily_prices
+    description: Precio vigente de cada producto en cada día (una fila por producto y día).
+    columns:
+      - name: daily_price_key
+        data_tests: [unique, not_null]
+      - name: date_day
+        data_tests:
+          - relationships: {arguments: {to: ref('all_dates'), field: date_day}}
+      - name: store_product_id
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_products'), field: store_product_id}}

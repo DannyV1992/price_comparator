@@ -5,6 +5,7 @@ profile: comparador
 model-paths: ["models"]
 macro-paths: ["macros"]
 test-paths: ["tests"]
+seed-paths: ["seeds"]
 
 clean-targets: ["target", "dbt_packages"]
 
@@ -21,3 +22,11 @@ models:
     marts:
       +schema: analytics
       +materialized: table
+    utilities:
+      +schema: analytics
+      +materialized: table
+
+# Datos de apoyo escritos a mano (CSV): se cargan al esquema de staging.
+seeds:
+  comparador:
+    +schema: refined

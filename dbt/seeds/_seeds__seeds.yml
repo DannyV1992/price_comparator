@@ -1,0 +1,43 @@
+version: 2
+
+seeds:
+  - name: store_info
+    description: >
+      Datos de apoyo de cada tienda (tipo de establecimiento). Se edita a mano; el tipo es una clasificación
+      aproximada que se puede corregir.
+    config:
+      column_types: {store_name: string, store_type: string}
+    columns:
+      - name: store_name
+        data_tests:
+          - unique
+          - not_null
+          - relationships: {arguments: {to: ref('stg_turso__stores'), field: store_name}}
+      - name: store_type
+        data_tests:
+          - accepted_values: {arguments: {values: [supermercado, hipermercado, descuento, club]}}
+
+  - name: category_mapping
+    description: >
+      Asigna cada categoría de una tienda a una categoría común (p. ej. «Lácteos y Huevos» y «Leches» a
+      «Lácteos») para comparar por categoría entre tiendas. Vacío por ahora.
+    config:
+      column_types: {store_name: string, store_category_id: string, unified_category: string}
+
+  - name: brand_aliases
+    description: >
+      Equivalencias de marca (p. ej. «COCA COLA» = «Coca-Cola») que ayudan al cruce de productos por nombre.
+      Vacío por ahora.
+    config:
+      column_types: {alias: string, canonical_brand: string}
+
+  - name: match_overrides
+    description: >
+      Decisiones manuales sobre el cruce de productos: un producto de tienda (product_key) que se confirma
+      o se rechaza como parte de un producto canónico. Se llena al revisar los casos dudosos. Vacío por ahora.
+    config:
+      column_types: {product_key: string, canonical_product_id: string, decision: string, notes: string}
+    columns:
+      - name: decision
+        data_tests:
+          - accepted_values: {arguments: {values: [confirmed, rejected]}}

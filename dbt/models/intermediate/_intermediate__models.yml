@@ -35,3 +35,13 @@ models:
         data_tests:
           - not_null
           - relationships: {arguments: {to: ref('int_products__matched_by_ean'), field: canonical_product_id}}
+
+  - name: int_prices__validity
+    description: Cada precio con el rango de días en que estuvo vigente.
+    columns:
+      - name: price_id
+        data_tests: [unique, not_null]
+      - name: valid_from
+        data_tests: [not_null]
+      - name: valid_to
+        data_tests: [not_null]

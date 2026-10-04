@@ -39,8 +39,9 @@ flowchart LR
     A --> APP
 ```
 
-Estado: `raw`, `refined` (staging), `intermediate` y los primeros marts de `analytics` están hechos. El cruce de
-productos entre tiendas, Power BI y la demo pública están pendientes.
+Estado: `raw`, `refined` (staging), `intermediate` y `analytics` están hechas, con el cruce de productos por código
+de barras, la comparación de precios y el historial diario. El cruce por nombre (Automercado, PriceSmart y Pequeño
+Mundo), Power BI y la demo pública están pendientes.
 
 ## Decisiones
 
@@ -64,3 +65,8 @@ productos entre tiendas, Power BI y la demo pública están pendientes.
 - **Calidad.** dbt corre pruebas de unicidad, nulos y llaves foráneas, más tres pruebas propias
   (precios no negativos, forma de la clave de código de barras y aviso si la última descarga de una
   tienda no quedó `ok`).
+- **Historial diario.** Turso guarda solo cambios, pero para graficar hace falta un precio por día. `int_prices__validity`
+  calcula el rango de días en que estuvo vigente cada precio y `fct_daily_prices` lo cruza con el calendario
+  `all_dates`. Un producto deja de aparecer el día en que se ve por última vez en el catálogo.
+- **Seeds.** Datos de apoyo escritos a mano en CSV (`dbt/seeds/`): tipo de tienda, mapa de categorías unificadas,
+  equivalencias de marca y decisiones manuales sobre el cruce de productos.

@@ -1,0 +1,8 @@
+version: 2
+
+models:
+  - name: all_dates
+    description: Calendario diario desde el primer precio guardado hasta hoy.
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
