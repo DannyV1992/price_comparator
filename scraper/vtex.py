@@ -21,6 +21,7 @@ from db import connect
 STORES = {  # clave de línea de comandos -> (nombre en la base, sitio)
     "masxmenos": ("Más x Menos", "https://www.masxmenos.cr"),
     "walmart": ("Walmart", "https://www.walmart.co.cr"),
+    "maxipali": ("Maxi Pali", "https://www.maxipali.co.cr"),
 }
 PAGE_SIZE = 50
 MAX_FROM = 2500  # VTEX responde 400 si _from > 2500

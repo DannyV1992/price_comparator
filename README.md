@@ -1,6 +1,6 @@
 # comparador-super
 
-Comparador de precios de supermercado. Tiendas descargadas hoy: **Más x Menos** y **Walmart** (VTEX), **Pequeño Mundo** (Magento GraphQL), **Automercado** (buscador Algolia) **Megasuper** (GraphQL de Instaleap) y **PriceSmart** (Bloomreach).
+Comparador de precios de supermercado. Tiendas descargadas hoy: **Más x Menos**, **Walmart** y **Maxi Pali** (VTEX), **Pequeño Mundo** (Magento GraphQL), **Automercado** (buscador Algolia) **Megasuper** (GraphQL de Instaleap) y **PriceSmart** (Bloomreach).
 
 ## Requisitos
 - Python 3.12, `httpx` y `curl_cffi` (`pip install -r requirements.txt`). Pequeño Mundo usa `curl_cffi` porque Cloudflare bloquea a `httpx` por su huella TLS.
@@ -11,6 +11,7 @@ python scraper/vtex.py masxmenos --only-categories    # solo categorías
 python scraper/vtex.py walmart --category 15 --max-pages 2  # prueba pequeña
 python scraper/vtex.py masxmenos                       # descarga completa (~30 min)
 python scraper/vtex.py walmart                         # Walmart completo (~1 h, 37.000 productos)
+python scraper/vtex.py maxipali                        # Maxi Pali completo (~30 min, 19.000 productos)
 python scraper/pequenomundo.py                         # Pequeño Mundo completo (~2 min)
 python scraper/automercado.py                          # Automercado, sucursal 06 Moravia (~5 min)
 python scraper/megasuper.py                            # Megasuper completo (~1 min)
@@ -25,6 +26,7 @@ Notas por tienda:
 - **Megasuper**: el `sku` es el código de barras. Las promociones por cantidad (p. ej. 4 por 3.300) no cambian `price`; están en el JSON guardado. Sus códigos a veces llevan ceros a la izquierda que otras tiendas no tienen: al cruzar productos hay que normalizarlos (con eso coinciden ~4.300 con Más x Menos, y ~2.900 sin normalizar).
 - **PriceSmart**: sin código de barras (SKU interno). Es un club con mucho producto que no es de súper (ropa, hogar). El precio viene en centavos y se convierte a colones; las existencias son solo hay / no hay. La categoría sale de consultar cada categoría de nivel 2 (y la raíz si no está en ninguna).
 - **Fresh Market** se descartó: su sitio es un menú sin precios y vende por Uber Eats / PedidosYa.
+- **Perimercados** se descartó: `perimercados.com` es un dominio estacionado en GoDaddy, sin tienda en línea.
 
 ## Automatización (Turso + GitHub Actions)
 `.github/workflows/scrape.yml` descarga cada tienda a diario a las 03:00 (hora de Costa Rica), en un trabajo independiente por tienda, con un SQLite temporal, y lo sube a Turso con `scraper/sync_turso.py`. Esa sincronización se puede repetir sin duplicar datos. Cada trabajo termina en rojo si la descarga no queda en estado `ok`.

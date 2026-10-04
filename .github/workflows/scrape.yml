@@ -17,6 +17,7 @@ jobs:
         include:
           - { name: Más x Menos,   run: python scraper/vtex.py masxmenos, timeout: 120 }
           - { name: Walmart,       run: python scraper/vtex.py walmart,    timeout: 180 }
+          - { name: Maxi Pali,     run: python scraper/vtex.py maxipali,   timeout: 120 }
           - { name: Pequeño Mundo, run: python scraper/pequenomundo.py,    timeout: 30 }
           - { name: Automercado,   run: python scraper/automercado.py,     timeout: 60 }
           - { name: Megasuper,     run: python scraper/megasuper.py,       timeout: 60 }
