@@ -1,16 +1,18 @@
-"""Descarga el catálogo de Megasuper (API GraphQL de Instaleap que usa el sitio) a SQLite.
+"""Descarga el catálogo de una tienda hecha con Instaleap (API GraphQL que usa el sitio) a SQLite.
 
-El sitio es una tienda Instaleap; su API es pública para cualquier visitante y responde con un
-certificado válido, así que no hace falta tocar el TLS de www.megasuper.com. Se usa la tienda de
-comercio electrónico M102, la que fija el sitio.
+Megasuper y Perimercados (peridomicilio.com) son tiendas Instaleap. Su API es pública para
+cualquier visitante y responde con un certificado válido, así que no hace falta tocar el TLS
+de los sitios (que lo tienen incompleto). Las llaves de cada tienda son las que el sitio envía
+en sus propias llamadas; si la descarga falla con 401/403, se vuelven a leer en el navegador.
 
-El `sku` es el código de barras (EAN). `price` es el precio por unidad con IVA (por kilo en
-productos por peso). Las promociones (p. ej. 4 por 3.300) no cambian `price`: quedan en el JSON
-original guardado.
+`price` es el precio por unidad con IVA (por kilo en productos por peso). Las promociones
+(p. ej. 4 por 3.300) no cambian `price`: quedan en el JSON original guardado.
+En Megasuper el `sku` es el código de barras; en Perimercados es un código interno y el `ean`
+puede ser un código corto de balanza (PLU) en frutas y verduras.
 
 Uso:
-    python scraper/megasuper.py --category 16        # una categoría raíz (prueba pequeña)
-    python scraper/megasuper.py                      # descarga completa (~25 peticiones)
+    python scraper/instaleap.py megasuper --category 16    # una categoría raíz (prueba pequeña)
+    python scraper/instaleap.py perimercados               # descarga completa
 """
 import argparse
 import json
@@ -24,15 +26,19 @@ import httpx
 
 from db import connect
 
-STORE_NAME = "Megasuper"
-SITE = "https://www.megasuper.com"
 API = "https://nextgentheadless.instaleap.io/api/v3"
-HEADERS = {  # las que envía el sitio a cualquier visitante
-    "content-type": "application/json",
-    "dpl-api-key": "09e9a997-5c41-4460-8fe7-3fa37f9774f1",
-    "client-name": "e-commerce Moira Engine MEGASUPER",
+STORES = {
+    "megasuper": {
+        "name": "Megasuper", "site": "https://www.megasuper.com",
+        "client_id": "MEGASUPER", "store_reference": "M102",  # tienda de comercio electrónico que fija el sitio
+        "api_key": "09e9a997-5c41-4460-8fe7-3fa37f9774f1",
+    },
+    "perimercados": {
+        "name": "Perimercados", "site": "https://www.peridomicilio.com",
+        "client_id": "PERI_DOMICILIOS", "store_reference": "133",
+        "api_key": "19781483-0ae5-4577-a05d-cca0a01cb2d0",
+    },
 }
-BASE = {"clientId": "MEGASUPER", "storeReference": "M102"}
 PAGE_SIZE = 1000
 GAP_THRESHOLD = 0.95
 
@@ -57,10 +63,15 @@ PRODUCTS_QUERY = """query($i: GetProductsByCategoryInput!) {
 
 
 class Client:
-    def __init__(self, pause=(1.0, 2.0)):
+    def __init__(self, store, pause=(1.0, 2.0)):
+        self.base = {"clientId": store["client_id"], "storeReference": store["store_reference"]}
         self.pause = pause
         self.retries = 0
-        self.http = httpx.Client(headers=HEADERS, timeout=90)
+        self.http = httpx.Client(timeout=90, headers={
+            "content-type": "application/json",
+            "dpl-api-key": store["api_key"],
+            "client-name": f"e-commerce Moira Engine {store['client_id']}",
+        })
 
     def query(self, query, variables):
         for attempt in range(5):
@@ -84,7 +95,7 @@ class Client:
 
     def products(self, category, page):
         """Devuelve (productos, total de la categoría, páginas)."""
-        d = self.query(PRODUCTS_QUERY, {"i": {**BASE, "categoryReference": category,
+        d = self.query(PRODUCTS_QUERY, {"i": {**self.base, "categoryReference": category,
                                                "currentPage": page, "pageSize": PAGE_SIZE}})["getProductsByCategory"]
         return (d["category"]["products"] or []), d["pagination"]["total"]["value"], d["pagination"]["pages"]
 
@@ -93,9 +104,9 @@ def now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def get_store_id(conn):
-    conn.execute("INSERT OR IGNORE INTO stores (name, website) VALUES (?, ?)", (STORE_NAME, SITE))
-    return conn.execute("SELECT id FROM stores WHERE name = ?", (STORE_NAME,)).fetchone()["id"]
+def get_store_id(conn, name, site):
+    conn.execute("INSERT OR IGNORE INTO stores (name, website) VALUES (?, ?)", (name, site))
+    return conn.execute("SELECT id FROM stores WHERE name = ?", (name,)).fetchone()["id"]
 
 
 def save_categories(conn, store_id, categories):
@@ -113,7 +124,7 @@ def save_categories(conn, store_id, categories):
         )
 
 
-def save_product(conn, store_id, run_id, p, scraped_at):
+def save_product(conn, store_id, run_id, p, scraped_at, site):
     cats = p.get("categoriesData") or []
     save_categories(conn, store_id, cats)
     deepest = max(cats, key=lambda c: c["level"], default=None)
@@ -135,7 +146,7 @@ def save_product(conn, store_id, run_id, p, scraped_at):
         (
             store_id, p["sku"], p["sku"], p["name"].strip(), (p.get("brand") or "").strip() or None, ean,
             deepest["reference"] if deepest else None, p.get("unit"), p.get("subQty"),
-            f"{SITE}/p/{p['slug']}" if p.get("slug") else None, photos[0] if photos else None,
+            f"{site}/p/{p['slug']}" if p.get("slug") else None, photos[0] if photos else None,
             raw_z, scraped_at, scraped_at,
         ),
     ).fetchone()
@@ -148,12 +159,13 @@ def save_product(conn, store_id, run_id, p, scraped_at):
     )
 
 
-def run(category=None):
+def run(key, category=None):
+    store = STORES[key]
     conn = connect()
-    store_id = get_store_id(conn)
-    client = Client()
+    store_id = get_store_id(conn, store["name"], store["site"])
+    client = Client(store)
 
-    roots = client.query(TREE_QUERY, {"i": BASE})["getCategory"]
+    roots = client.query(TREE_QUERY, {"i": client.base})["getCategory"]
     if category:
         roots = [r for r in roots if r["reference"] == category]
         if not roots:
@@ -173,7 +185,7 @@ def run(category=None):
     try:
         for root in roots:
             retries_before = client.retries
-            before = len(seen)
+            got = 0
             page, pages, total = 1, 1, 0
             while page <= pages:
                 products, total, pages = client.products(root["reference"], page)
@@ -181,10 +193,10 @@ def run(category=None):
                 for p in products:
                     if p["sku"] not in seen:
                         seen.add(p["sku"])
-                        save_product(conn, store_id, run_id, p, scraped_at)
+                        save_product(conn, store_id, run_id, p, scraped_at, store["site"])
+                got += len(products)
                 conn.commit()
                 page += 1
-            got = len(seen) - before
             reported += total
             conn.execute(
                 """INSERT OR REPLACE INTO scrape_run_categories
@@ -201,7 +213,7 @@ def run(category=None):
     finally:
         notes = None
         if status != "error":
-            notes = f"el sitio reporta {reported} productos"
+            notes = f"las categorías reportan {reported} productos"
             if gaps:
                 notes += "; categorías incompletas: " + ", ".join(gaps)
         conn.execute(
@@ -209,12 +221,13 @@ def run(category=None):
             (now(), status, len(seen), len(seen), notes, run_id),
         )
         conn.commit()
-    print(f"Listo. Estado: {status} | productos: {len(seen)} (el sitio reporta {reported})")
+    print(f"Listo. Estado: {status} | productos: {len(seen)} (las categorías reportan {reported})")
 
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
-    ap = argparse.ArgumentParser(description="Descarga el catálogo de Megasuper")
+    ap = argparse.ArgumentParser(description="Descarga el catálogo de una tienda Instaleap")
+    ap.add_argument("store", choices=STORES, help="tienda a descargar")
     ap.add_argument("--category", help="referencia de una categoría raíz, p. ej. 16 (descarga parcial)")
     args = ap.parse_args()
-    run(args.category)
+    run(args.store, args.category)

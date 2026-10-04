@@ -20,7 +20,8 @@ jobs:
           - { name: Maxi Pali,     run: python scraper/vtex.py maxipali,   timeout: 120 }
           - { name: Pequeño Mundo, run: python scraper/pequenomundo.py,    timeout: 30 }
           - { name: Automercado,   run: python scraper/automercado.py,     timeout: 60 }
-          - { name: Megasuper,     run: python scraper/megasuper.py,       timeout: 60 }
+          - { name: Megasuper,     run: python scraper/instaleap.py megasuper,    timeout: 60 }
+          - { name: Perimercados,  run: python scraper/instaleap.py perimercados, timeout: 60 }
           - { name: PriceSmart,    run: python scraper/pricesmart.py,      timeout: 60 }
     steps:
       - uses: actions/checkout@v4
