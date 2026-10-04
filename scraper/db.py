@@ -31,6 +31,17 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
     notes         TEXT
 );
 
+-- Una fila por categoría recorrida en cada descarga: sirve para detectar huecos.
+CREATE TABLE IF NOT EXISTS scrape_run_categories (
+    run_id         INTEGER NOT NULL REFERENCES scrape_runs(id),
+    category_path  TEXT NOT NULL,         -- ruta de ids, p. ej. 6/40
+    name           TEXT NOT NULL,
+    reported_total INTEGER NOT NULL,      -- productos que dice tener el sitio
+    downloaded     INTEGER NOT NULL,      -- productos que bajamos
+    retries        INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (run_id, category_path)
+);
+
 -- Una fila por SKU (item) tal como aparece en la tienda.
 CREATE TABLE IF NOT EXISTS store_products (
     id                INTEGER PRIMARY KEY,

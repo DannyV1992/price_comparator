@@ -23,11 +23,13 @@ SITE = "https://www.masxmenos.cr"
 API = SITE + "/api/catalog_system/pub"
 PAGE_SIZE = 50
 MAX_FROM = 2500  # VTEX responde 400 si _from > 2500
+GAP_THRESHOLD = 0.95  # bajo este porcentaje de lo esperado, la categoría se marca incompleta
 
 
 class Client:
     def __init__(self, pause=(1.0, 2.0)):
         self.pause = pause
+        self.retries = 0
         self.http = httpx.Client(
             headers={"User-Agent": "Mozilla/5.0 (compatible; comparador-super/0.1; uso personal)"},
             timeout=40,
@@ -48,6 +50,7 @@ class Client:
                     r.raise_for_status()
                 err = f"HTTP {r.status_code}"
             wait = 5 * 2**attempt
+            self.retries += 1
             print(f"  reintento en {wait}s ({err})", flush=True)
             time.sleep(wait)
         raise RuntimeError(f"Falló tras varios intentos: {url}")
@@ -140,25 +143,29 @@ def save_product(conn, store_id, run_id, product, scraped_at, seen_items):
     return saved
 
 
-def walk(client, node, parent_path, handle, max_pages):
+def walk(client, node, parent_path, handle, record, max_pages):
     """Recorre una categoría paginando. Si excede el límite de VTEX, baja a sus hijas."""
     path = f"{parent_path}/{node['id']}" if parent_path else str(node["id"])
+    retries_before = client.retries
     page, total = client.search(path, 0)
     if not total:
         return
     print(f"  [{path}] {node['name']}: {total} productos", flush=True)
     handle(page)
+    downloaded = len(page)
     start, pages = PAGE_SIZE, 1
     while start < total and start <= MAX_FROM and not (max_pages and pages >= max_pages):
         page, _ = client.search(path, start)
         if not page:
             break
         handle(page)
+        downloaded += len(page)
         start += PAGE_SIZE
         pages += 1
+    record(path, node["name"], total, downloaded, client.retries - retries_before)
     if total > MAX_FROM + PAGE_SIZE and not max_pages:
         for child in node.get("children", []):
-            walk(client, child, path, handle, max_pages)
+            walk(client, child, path, handle, record, max_pages)
 
 
 def run(category=None, max_pages=None, only_categories=False):
@@ -195,17 +202,34 @@ def run(category=None, max_pages=None, only_categories=False):
             save_product(conn, store_id, run_id, p, scraped_at, seen_items)
         conn.commit()
 
+    gaps = []  # categorías donde bajamos bastante menos de lo que reporta el sitio
+
+    def record(path, name, total, downloaded, retries):
+        conn.execute(
+            """INSERT OR REPLACE INTO scrape_run_categories
+                 (run_id, category_path, name, reported_total, downloaded, retries)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (run_id, path, name, total, downloaded, retries),
+        )
+        conn.commit()
+        expected = min(total, MAX_FROM + PAGE_SIZE)  # tope de VTEX por búsqueda
+        if not max_pages and downloaded < GAP_THRESHOLD * expected:
+            gaps.append(f"{path} {name} ({downloaded}/{expected})")
+            print(f"  AVISO: [{path}] {name} bajó {downloaded} de {expected}", flush=True)
+
     try:
         for root in roots:
             print(f"== {root['name']}", flush=True)
-            walk(client, root, None, handle, max_pages)
-        status = "partial" if (category or max_pages) else "ok"
+            walk(client, root, None, handle, record, max_pages)
+        status = "partial" if (category or max_pages or gaps) else "ok"
     finally:
         notes = None
-        if status == "ok":
+        if status != "error" and not (category or max_pages):
             _, site_total = client.search(None, 0)
             notes = f"el sitio reporta {site_total} productos"
             print(f"Productos únicos descargados: {len(seen_products)} (el sitio reporta {site_total})")
+            if gaps:
+                notes += "; categorías incompletas: " + ", ".join(gaps)
         conn.execute(
             "UPDATE scrape_runs SET finished_at = ?, status = ?, products_seen = ?, items_seen = ?, notes = ? WHERE id = ?",
             (now(), status, len(seen_products), len(seen_items), notes, run_id),

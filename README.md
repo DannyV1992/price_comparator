@@ -18,7 +18,8 @@ Todo queda en `data/comparador.db` (no se sube a git). Cada ejecución agrega un
 - `categories`: árbol de categorías de cada tienda
 - `store_products`: un SKU por fila (nombre, marca, EAN, unidad, JSON original comprimido con zlib)
 - `prices`: historial de precios (precio, precio de lista, disponibilidad, fecha)
-- `scrape_runs`: registro de cada descarga
+- `scrape_runs`: registro de cada descarga (queda `partial` si alguna categoría baja menos del 95% de lo esperado)
+- `scrape_run_categories`: por descarga y categoría, lo que reporta el sitio, lo descargado y los reintentos
 
 ## Leer el JSON original de un producto
 ```python
