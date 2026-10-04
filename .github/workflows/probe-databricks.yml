@@ -1,0 +1,34 @@
+name: Prueba de acceso a Databricks
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/probe-databricks.yml
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install databricks-sql-connector
+
+      - name: Consultar el warehouse
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import os
+          from databricks import sql
+          with sql.connect(server_hostname=os.environ["DATABRICKS_HOST"], http_path=os.environ["DATABRICKS_HTTP_PATH"],
+                           access_token=os.environ["DATABRICKS_TOKEN"]) as c:
+              cur = c.cursor()
+              cur.execute("SHOW SCHEMAS IN comparador_precios")
+              print("esquemas:", [r[0] for r in cur.fetchall()])
+          EOF
