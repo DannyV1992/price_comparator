@@ -13,6 +13,16 @@ python scraper/masxmenos.py                            # descarga completa (~10-
 ```
 Todo queda en `data/comparador.db` (no se sube a git). Cada ejecución agrega un precio nuevo por producto, así se arma el historial.
 
+## Automatización (Turso + GitHub Actions)
+`.github/workflows/scrape.yml` descarga el catálogo cada día a las 03:00 (hora de Costa Rica) en un SQLite temporal y lo sube a Turso con `scraper/sync_turso.py`. Esa sincronización se puede repetir sin duplicar datos. El flujo termina en rojo si la descarga no queda en estado `ok`.
+
+Secretos del repositorio (Settings → Secrets and variables → Actions): `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`.
+
+Para subir a mano la última descarga local, define las mismas dos variables (o un archivo `.env` en la raíz, ignorado por git) y ejecuta:
+```
+python scraper/sync_turso.py
+```
+
 ## Tablas
 - `stores`: tiendas
 - `categories`: árbol de categorías de cada tienda
