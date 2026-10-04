@@ -1,24 +1,27 @@
 # comparador-super
 
-Comparador de precios de supermercado. Etapa actual: descargar el catálogo de **Más x Menos** a una base SQLite local.
+Comparador de precios de supermercado. Tiendas descargadas hoy: **Más x Menos** (VTEX) y **Pequeño Mundo** (Magento GraphQL).
 
 ## Requisitos
-- Python 3.12 y `httpx` (`pip install -r requirements.txt`)
+- Python 3.12, `httpx` y `curl_cffi` (`pip install -r requirements.txt`). Pequeño Mundo usa `curl_cffi` porque Cloudflare bloquea a `httpx` por su huella TLS.
 
 ## Uso
 ```
 python scraper/masxmenos.py --only-categories          # solo categorías
 python scraper/masxmenos.py --category 15 --max-pages 2 # prueba pequeña
-python scraper/masxmenos.py                            # descarga completa (~10-15 min)
+python scraper/masxmenos.py                            # descarga completa (~30 min)
+python scraper/pequenomundo.py                         # Pequeño Mundo completo (~2 min)
 ```
 Todo queda en `data/comparador.db` (no se sube a git). Cada ejecución agrega un precio nuevo por producto, así se arma el historial.
 
+Diferencias de Pequeño Mundo: no publica código de barras (`ean` queda vacío), la marca se saca de la descripción, no publica la cantidad en existencia (`available_qty` es 1 si hay y 0 si está agotado) y un agotado conserva su precio real (en Más x Menos aparece como 0).
+
 ## Automatización (Turso + GitHub Actions)
-`.github/workflows/scrape.yml` descarga el catálogo cada día a las 03:00 (hora de Costa Rica) en un SQLite temporal y lo sube a Turso con `scraper/sync_turso.py`. Esa sincronización se puede repetir sin duplicar datos. El flujo termina en rojo si la descarga no queda en estado `ok`.
+`.github/workflows/scrape.yml` descarga cada tienda a diario a las 03:00 (hora de Costa Rica), en un trabajo independiente por tienda, con un SQLite temporal, y lo sube a Turso con `scraper/sync_turso.py`. Esa sincronización se puede repetir sin duplicar datos. Cada trabajo termina en rojo si la descarga no queda en estado `ok`.
 
 Secretos del repositorio (Settings → Secrets and variables → Actions): `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`.
 
-**En Turso, `prices` solo guarda cambios.** Se agrega una fila cuando el precio, el precio de lista o la disponibilidad (hay / no hay existencias) cambian respecto a la última fila del producto. La cantidad exacta no cuenta como cambio. Para saber el precio de un producto en una fecha, se toma su última fila hasta esa fecha; un precio `0` significa agotado. Que el producto siga en el catálogo lo dice `store_products.last_seen`, y cada descarga queda en `scrape_runs` (en `notes` se anota cuántos precios cambiaron). El SQLite local, en cambio, guarda una fila por producto en cada descarga.
+**En Turso, `prices` solo guarda cambios.** Se agrega una fila cuando el precio, el precio de lista o la disponibilidad (hay / no hay existencias) cambian respecto a la última fila del producto. La cantidad exacta no cuenta como cambio. Para saber el precio de un producto en una fecha, se toma su última fila hasta esa fecha; un precio `0` significa agotado en Más x Menos (en Pequeño Mundo, `available_qty = 0`). Que el producto siga en el catálogo lo dice `store_products.last_seen`, y cada descarga queda en `scrape_runs` (en `notes` se anota cuántos precios cambiaron). El SQLite local, en cambio, guarda una fila por producto en cada descarga.
 
 Para subir a mano la última descarga local, define las mismas dos variables (o un archivo `.env` en la raíz, ignorado por git) y ejecuta:
 ```
