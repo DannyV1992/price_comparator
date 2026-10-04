@@ -48,8 +48,8 @@ Estado: las capas `raw` y `refined` están hechas. `analytics`, Power BI y la de
   precio de lista o la disponibilidad. Así el historial crece poco.
 - **Databricks se carga desde Turso, no desde cada tienda.** Un único proceso escribe en Delta; ocho
   escribiendo a la vez en las mismas tablas chocarían.
-- **La carga a Databricks y dbt son pasos extra** (`continue-on-error`): si fallan, la descarga diaria
-  no se pierde.
+- **La carga a Databricks y dbt son trabajos aparte**: si fallan, las descargas ya hechas
+  no se pierden, pero la corrida sale en rojo y llega el aviso por correo.
 - **Capas.** `raw` es una copia fiel (fechas como texto, ids de Turso). `refined` tipa, renombra y
   normaliza. `analytics` combina tiendas.
 - **Clave de cruce entre tiendas: código de barras normalizado.** Sin ceros a la izquierda y

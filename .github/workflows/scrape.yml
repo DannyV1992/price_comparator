@@ -4,25 +4,57 @@ on:
   schedule:
     - cron: "0 9 * * *"  # 09:00 UTC = 03:00 en Costa Rica
   workflow_dispatch:      # también se puede lanzar a mano desde la pestaña Actions
+    inputs:
+      store:
+        description: Tienda a descargar ("todas" para las ocho). La lista está en .github/stores.json
+        type: choice
+        default: todas
+        options:
+          - todas
+          - Más x Menos
+          - Walmart
+          - Maxi Pali
+          - Pequeño Mundo
+          - Automercado
+          - Megasuper
+          - Perimercados
+          - PriceSmart
+
+permissions:
+  contents: read
+  actions: read
 
 # Un trabajo por tienda: corren en paralelo y si una falla, las otras siguen.
+# Después se carga a Databricks, se transforma con dbt y, si algo falló, se avisa por correo.
 jobs:
+  plan:
+    name: Elegir tiendas
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: pick
+        env:
+          STORE: ${{ inputs.store || 'todas' }}
+        run: |
+          matrix=$(jq -c --arg s "$STORE" '{include: map(select($s == "todas" or .name == $s))}' .github/stores.json)
+          if [ "$(echo "$matrix" | jq '.include | length')" = "0" ]; then
+            echo "No hay ninguna tienda llamada '$STORE' en .github/stores.json"; exit 1
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Tiendas: $(echo "$matrix" | jq -r '[.include[].name] | join(", ")')"
+
   scrape:
     name: ${{ matrix.name }}
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { name: Más x Menos,   run: python scraper/vtex.py masxmenos, timeout: 120 }
-          - { name: Walmart,       run: python scraper/vtex.py walmart,    timeout: 180 }
-          - { name: Maxi Pali,     run: python scraper/vtex.py maxipali,   timeout: 120 }
-          - { name: Pequeño Mundo, run: python scraper/pequenomundo.py,    timeout: 30 }
-          - { name: Automercado,   run: python scraper/automercado.py,     timeout: 60 }
-          - { name: Megasuper,     run: python scraper/instaleap.py megasuper,    timeout: 60 }
-          - { name: Perimercados,  run: python scraper/instaleap.py perimercados, timeout: 60 }
-          - { name: PriceSmart,    run: python scraper/pricesmart.py,      timeout: 60 }
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,15 +74,14 @@ jobs:
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: python scraper/sync_turso.py --fail-unless-ok
 
-  # Cuando terminan todas las tiendas, copia Turso a Databricks (esquema raw). Es un paso extra:
-  # si falla, la descarga diaria no se ve afectada.
+  # Cuando terminan las tiendas, copia Turso a Databricks (esquema raw). Una falla aquí no afecta
+  # a las descargas (son trabajos aparte), pero sí se ve en rojo y dispara el aviso por correo.
   databricks:
     name: Cargar a Databricks
     needs: scrape
     if: ${{ !cancelled() }}  # corre aunque alguna tienda haya fallado
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -78,7 +109,6 @@ jobs:
     if: ${{ !cancelled() && needs.databricks.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -96,3 +126,20 @@ jobs:
           DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: dbt build --project-dir dbt --profiles-dir dbt
+
+  notify:
+    name: Avisar por correo
+    needs: [plan, scrape, databricks, dbt]
+    if: ${{ failure() }}  # solo si algún trabajo anterior falló
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enviar correo con los trabajos que fallaron
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: python3 scraper/notify_failure.py

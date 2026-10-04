@@ -41,8 +41,13 @@ Para subir a mano la última descarga local, define las mismas dos variables (o 
 python scraper/sync_turso.py
 ```
 
+## Avisos por correo y repetir una sola tienda
+- **Aviso.** Si algún trabajo falla (una tienda, la carga a Databricks o dbt), el último trabajo del flujo (`Avisar por correo`) manda un correo con los trabajos que fallaron, el paso exacto y los enlaces. Lo envía `scraper/notify_failure.py` por SMTP. Secretos del repositorio: `SMTP_USER` (cuenta que envía, p. ej. Gmail), `SMTP_PASSWORD` (contraseña de aplicación de esa cuenta, no la normal) y `NOTIFY_EMAIL` (quién recibe; opcional, por defecto `SMTP_USER`).
+- **Repetir lo que falló.** Si el error fue pasajero (red, 429, 5xx): en la corrida, botón **Re-run failed jobs**; repite solo los trabajos en rojo y conserva los que salieron bien.
+- **Repetir una tienda con el código corregido.** Actions → Descarga diaria de precios → **Run workflow** → elegir la tienda en la lista (o «todas»). El botón de repetir usa el código del commit original; esta opción usa el actual. La lista de tiendas y sus tiempos máximos está en `.github/stores.json`; si se agrega una tienda, también hay que agregarla a las opciones de `scrape.yml`.
+
 ## Databricks (lakehouse)
-Después de que terminan todas las tiendas, un trabajo final (`Cargar a Databricks`) copia Turso al catálogo `comparador_precios`, esquema `raw`, en tablas Delta (`stores`, `categories`, `scrape_runs`, `scrape_run_categories`, `store_products`, `prices`) con `scraper/sync_databricks.py`. Los datos llegan tal como están en Turso (ids de Turso, fechas como texto, sin el JSON original); `refined` y `analytics` se construyen a partir de `raw`. Es un paso extra: si falla, la descarga diaria no se ve afectada. Se puede repetir sin duplicar: `prices` continúa desde el mayor id que ya hay y las demás tablas se mezclan con `MERGE`.
+Después de que terminan todas las tiendas, un trabajo final (`Cargar a Databricks`) copia Turso al catálogo `comparador_precios`, esquema `raw`, en tablas Delta (`stores`, `categories`, `scrape_runs`, `scrape_run_categories`, `store_products`, `prices`) con `scraper/sync_databricks.py`. Los datos llegan tal como están en Turso (ids de Turso, fechas como texto, sin el JSON original); `refined` y `analytics` se construyen a partir de `raw`. Es un trabajo aparte: si falla, las descargas de las tiendas no se ven afectadas, pero el flujo sale en rojo y avisa por correo. Se puede repetir sin duplicar: `prices` continúa desde el mayor id que ya hay y las demás tablas se mezclan con `MERGE`.
 
 Secretos adicionales: `DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH` y `DATABRICKS_TOKEN`. Para correrlo a mano, las mismas tres variables (más las de Turso) en `.env`:
 ```
