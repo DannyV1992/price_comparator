@@ -10,6 +10,6 @@ from (
     select
         *,
         row_number() over (partition by store_product_id order by scraped_at desc, price_id desc) as rn
-    from {{ ref('prices') }}
+    from {{ ref('stg_turso__prices') }}
 )
 where rn = 1

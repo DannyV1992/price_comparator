@@ -21,8 +21,9 @@ flowchart LR
 
     subgraph DBX["Databricks · catálogo comparador_precios"]
         R[raw<br/>como llega]
-        F[refined<br/>limpio y tipado<br/>EAN normalizado]
-        A[analytics<br/>productos equivalentes<br/>tablas para BI]
+        F[refined · dbt staging<br/>limpio y tipado<br/>EAN normalizado]
+        I[intermediate · dbt<br/>transformaciones previas]
+        A[analytics · dbt marts<br/>dim_ y fct_<br/>productos equivalentes]
     end
 
     BI[Power BI]
@@ -33,12 +34,13 @@ flowchart LR
     O --> S
     S --> T
     T --> L --> R
-    R --> D --> F --> A
+    R --> D --> F --> I --> A
     A --> BI
     A --> APP
 ```
 
-Estado: las capas `raw` y `refined` están hechas. `analytics`, Power BI y la demo pública están pendientes.
+Estado: `raw`, `refined` (staging), `intermediate` y los primeros marts de `analytics` están hechos. El cruce de
+productos entre tiendas, Power BI y la demo pública están pendientes.
 
 ## Decisiones
 
@@ -50,8 +52,11 @@ Estado: las capas `raw` y `refined` están hechas. `analytics`, Power BI y la de
   escribiendo a la vez en las mismas tablas chocarían.
 - **La carga a Databricks y dbt son trabajos aparte**: si fallan, las descargas ya hechas
   no se pierden, pero la corrida sale en rojo y llega el aviso por correo.
-- **Capas.** `raw` es una copia fiel (fechas como texto, ids de Turso). `refined` tipa, renombra y
-  normaliza. `analytics` combina tiendas.
+- **Capas y convención de dbt.** Cada capa de dbt tiene su esquema en el catálogo `comparador_precios`:
+  `raw` es una copia fiel de Turso (fechas como texto, ids de Turso); `refined` es *staging* (modelos
+  `stg_turso__*`, uno por tabla: renombrar, tipar, limpiar); `intermediate` guarda las transformaciones
+  previas (`int_*`) que hagan falta para llegar a los marts; `analytics` son los *marts* (`dim_*` y `fct_*`),
+  los que consume Power BI.
 - **Clave de cruce entre tiendas: código de barras normalizado.** Sin ceros a la izquierda y
   rellenado a 14 dígitos (GTIN-14). Los códigos de menos de 8 dígitos son de balanza (frutas y
   verduras), no códigos de barras. Automercado, PriceSmart y Pequeño Mundo no publican código de

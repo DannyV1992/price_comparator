@@ -1,8 +1,10 @@
 version: 2
 
 sources:
-  - name: raw
-    description: Copia de Turso tal como llega (la carga la hace scraper/sync_databricks.py).
+  - name: turso
+    description: >
+      Copia de la base de Turso tal como llega a Databricks (la carga la hace scraper/sync_databricks.py).
+      Fechas como texto e ids de Turso.
     database: comparador_precios
     schema: raw
     tables:

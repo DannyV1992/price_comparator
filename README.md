@@ -55,10 +55,10 @@ pip install -r requirements-databricks.txt
 python scraper/sync_databricks.py
 ```
 
-Capas: `raw` (como llegan), `refined` (limpio, tipado, EAN normalizado) y `analytics` (productos equivalentes y tablas para BI). El diagrama y las decisiones están en [docs/arquitectura.md](docs/arquitectura.md).
+Capas (una por esquema): `raw` (como llegan), `refined` (staging de dbt: limpio y tipado, EAN normalizado), `intermediate` (transformaciones previas a los marts) y `analytics` (marts de dbt: `dim_` y `fct_`, para BI). El diagrama y las decisiones están en [docs/arquitectura.md](docs/arquitectura.md).
 
 ### dbt
-`dbt/` tiene los modelos de `refined` (`stores`, `categories`, `products`, `prices`, `current_prices`, `scrape_runs`), la macro `normalize_ean` y las pruebas de calidad. En el flujo diario corre como último trabajo, después de la carga a Databricks. A mano, con las variables de Databricks en el entorno:
+`dbt/` sigue la convención de dbt: `models/staging/turso` (`stg_turso__*`, vistas en `refined`), `models/intermediate` (`int_*`, vistas en `intermediate`) y `models/marts` (`dim_stores`, `dim_products`, `fct_price_changes`, `fct_current_prices`, `fct_scrape_runs`, tablas en `analytics`). Incluye la macro `normalize_ean` y las pruebas de calidad. En el flujo diario corre como último trabajo, después de la carga a Databricks. A mano, con las variables de Databricks en el entorno:
 ```
 pip install -r dbt/requirements.txt
 dbt build --project-dir dbt --profiles-dir dbt

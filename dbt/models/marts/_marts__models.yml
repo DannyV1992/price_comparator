@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: dim_stores
+    description: Tiendas.
+    columns:
+      - name: store_id
+        data_tests: [unique, not_null]
+
+  - name: dim_products
+    description: Un producto por SKU de tienda, con tienda y categoría. ean_key sirve para cruzar entre tiendas.
+    columns:
+      - name: store_product_id
+        data_tests: [unique, not_null]
+      - name: store_id
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_stores'), field: store_id}}
+
+  - name: fct_price_changes
+    description: Un evento por cada cambio de precio, precio de lista o disponibilidad.
+    columns:
+      - name: price_id
+        data_tests: [unique, not_null]
+      - name: store_product_id
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_products'), field: store_product_id}}
+      - name: run_id
+        data_tests:
+          - relationships: {arguments: {to: ref('fct_scrape_runs'), field: run_id}}
+
+  - name: fct_current_prices
+    description: Precio vigente de cada producto.
+    columns:
+      - name: store_product_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships: {arguments: {to: ref('dim_products'), field: store_product_id}}
+
+  - name: fct_scrape_runs
+    description: Una fila por descarga de una tienda.
+    columns:
+      - name: run_id
+        data_tests: [unique, not_null]

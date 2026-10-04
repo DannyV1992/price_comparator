@@ -8,11 +8,16 @@ test-paths: ["tests"]
 
 clean-targets: ["target", "dbt_packages"]
 
+# Convención de dbt: staging -> intermediate -> marts. Cada capa tiene su esquema en el lakehouse:
+# raw (datos como llegan) -> refined (staging) -> intermediate -> analytics (marts).
 models:
   comparador:
-    refined:
+    staging:
       +schema: refined
-      +materialized: table
-    analytics:
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
       +schema: analytics
       +materialized: table

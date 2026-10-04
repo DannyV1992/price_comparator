@@ -5,7 +5,7 @@ from (
     select
         *,
         row_number() over (partition by store_id order by started_at desc) as rn
-    from {{ ref('scrape_runs') }}
+    from {{ ref('fct_scrape_runs') }}
     where status not in ('running', 'syncing')
 )
 where rn = 1 and status != 'ok'
