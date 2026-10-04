@@ -69,3 +69,11 @@ models:
       - name: status
         data_tests:
           - accepted_values: {arguments: {values: [running, syncing, ok, partial, error]}}
+
+  - name: stg_turso__scrape_run_categories
+    description: Por descarga y categoría, lo que reporta el sitio frente a lo descargado.
+    columns:
+      - name: run_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('stg_turso__scrape_runs'), field: run_id}}

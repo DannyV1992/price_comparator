@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: fct_store_price_index
+    description: Índice de precios por tienda y día (100 = mediana del mercado; menos de 100 = más barata).
+    columns:
+      - name: index_key
+        data_tests: [unique, not_null]
+      - name: store_id
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_stores'), field: store_id}}
+      - name: price_index
+        data_tests: [not_null]
+
+  - name: fct_basket_prices
+    description: Costo de cada canasta por tienda y día; cheapest_rank ordena las tiendas con canasta completa.
+    columns:
+      - name: basket_key
+        data_tests: [unique, not_null]
+      - name: store_id
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_stores'), field: store_id}}

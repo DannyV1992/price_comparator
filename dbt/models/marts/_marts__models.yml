@@ -2,10 +2,12 @@ version: 2
 
 models:
   - name: dim_stores
-    description: Tiendas.
+    description: Tiendas, con su tipo de establecimiento (seed store_info).
     columns:
       - name: store_id
         data_tests: [unique, not_null]
+      - name: store_type
+        data_tests: [not_null]
 
   - name: dim_products
     description: Un producto por SKU de tienda, con tienda y categoría. ean_key sirve para cruzar entre tiendas.
@@ -26,8 +28,10 @@ models:
       - name: canonical_product_id
         data_tests: [unique, not_null]
       - name: n_stores
-        description: En cuántas tiendas se vende.
+        description: En cuántas tiendas se vende (contando también los cruces por nombre).
         data_tests: [not_null]
+      - name: match_methods
+        description: Cómo se cruzaron sus productos (ean, name, manual).
 
   - name: fct_price_comparison
     description: >
@@ -83,3 +87,18 @@ models:
       - name: store_product_id
         data_tests:
           - relationships: {arguments: {to: ref('dim_products'), field: store_product_id}}
+
+  - name: fct_scrape_coverage
+    description: Por descarga y categoría, lo que reporta el sitio frente a lo descargado.
+    columns:
+      - name: coverage_key
+        data_tests: [unique, not_null]
+      - name: run_id
+        data_tests:
+          - relationships: {arguments: {to: ref('fct_scrape_runs'), field: run_id}}
+
+  - name: fct_match_review
+    description: Cruces por nombre dudosos pendientes de revisión (se deciden en el seed match_overrides).
+    columns:
+      - name: product_key
+        data_tests: [unique, not_null]

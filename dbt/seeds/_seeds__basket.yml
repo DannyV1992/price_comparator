@@ -1,0 +1,16 @@
+version: 2
+
+seeds:
+  - name: basket_items
+    description: >
+      Canastas de productos para comparar el costo total por tienda. Cada fila es un producto canónico y la
+      cantidad que lleva la canasta. La canasta de ejemplo (canasta_basica) se puede editar o ampliar.
+    config:
+      column_types: {basket_name: string, canonical_product_id: string, quantity: int, notes: string}
+    columns:
+      - name: canonical_product_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_canonical_products'), field: canonical_product_id}}
+      - name: quantity
+        data_tests: [not_null]

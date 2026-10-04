@@ -1,4 +1,4 @@
-# comparador-super
+# Comparador de precios
 
 Comparador de precios de supermercado. Tiendas descargadas hoy: **Más x Menos**, **Walmart** y **Maxi Pali** (VTEX), **Pequeño Mundo** (Magento GraphQL), **Automercado** (buscador Algolia) **Megasuper** y **Perimercados** (GraphQL de Instaleap) y **PriceSmart** (Bloomreach).
 
@@ -58,7 +58,7 @@ python -m sync.to_databricks
 Capas (una por esquema): `raw` (como llegan), `refined` (staging de dbt: limpio y tipado, EAN normalizado), `intermediate` (transformaciones previas a los marts) y `analytics` (marts de dbt: `dim_` y `fct_`, para BI). El diagrama y las decisiones están en [docs/arquitectura.md](docs/arquitectura.md).
 
 ### dbt
-`dbt/` sigue la convención de dbt: `models/staging/turso` (`stg_turso__*`, vistas en `refined`), `models/intermediate` (`int_*`, vistas en `intermediate`) y `models/marts` (`dim_stores`, `dim_products`, `dim_canonical_products`, `fct_price_changes`, `fct_current_prices`, `fct_daily_prices`, `fct_price_comparison`, `fct_scrape_runs`, tablas en `analytics`). `models/utilities` tiene el calendario (`all_dates`) y `seeds/` los datos de apoyo escritos a mano en CSV (`store_info`, `category_mapping`, `brand_aliases`, `match_overrides`; los tres últimos están vacíos y se llenan al revisar el cruce de productos). Incluye la macro `normalize_ean` y las pruebas de calidad. En el flujo diario corre como último trabajo, después de la carga a Databricks. A mano, con las variables de Databricks en el entorno:
+`dbt/` sigue la convención de dbt: `models/staging/turso` (`stg_turso__*`, vistas en `refined`), `models/intermediate` (`int_*`, vistas en `intermediate`) y `models/marts` (`dim_stores`, `dim_products`, `dim_canonical_products`, `fct_price_changes`, `fct_current_prices`, `fct_daily_prices`, `fct_price_comparison`, `fct_scrape_runs`, `fct_scrape_coverage`, `fct_match_review`, `fct_store_price_index`, `fct_basket_prices`, tablas en `analytics`). `models/utilities` tiene el calendario (`all_dates`) y `seeds/` los datos de apoyo escritos a mano en CSV (`store_info`, `basket_items`, `category_mapping`, `brand_aliases`, `match_overrides`; los tres últimos están vacíos). Los productos sin código de barras se cruzan por nombre y tamaño; los casos dudosos salen en `fct_match_review` y se resuelven agregando una fila a `match_overrides.csv` (`confirmed` o `rejected`). Incluye la macro `normalize_ean` y las pruebas de calidad. En el flujo diario corre como último trabajo, después de la carga a Databricks. A mano, con las variables de Databricks en el entorno:
 ```
 pip install -r dbt/requirements.txt
 dbt build --project-dir dbt --profiles-dir dbt
