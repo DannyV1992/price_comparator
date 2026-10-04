@@ -7,10 +7,19 @@ on:
 
 # Un trabajo por tienda: corren en paralelo y si una falla, las otras siguen.
 jobs:
-  masxmenos:
-    name: Más x Menos
+  scrape:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Más x Menos,   run: python scraper/vtex.py masxmenos, timeout: 120 }
+          - { name: Walmart,       run: python scraper/vtex.py walmart,    timeout: 180 }
+          - { name: Pequeño Mundo, run: python scraper/pequenomundo.py,    timeout: 30 }
+          - { name: Automercado,   run: python scraper/automercado.py,     timeout: 60 }
+          - { name: Megasuper,     run: python scraper/megasuper.py,       timeout: 60 }
     steps:
       - uses: actions/checkout@v4
 
@@ -22,53 +31,7 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Descargar catálogo (SQLite temporal)
-        run: python scraper/vtex.py masxmenos
-
-      - name: Subir a Turso
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: python scraper/sync_turso.py --fail-unless-ok
-
-  walmart:
-    name: Walmart
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - run: pip install -r requirements.txt
-
-      - name: Descargar catálogo (SQLite temporal)
-        run: python scraper/vtex.py walmart
-
-      - name: Subir a Turso
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: python scraper/sync_turso.py --fail-unless-ok
-
-  pequenomundo:
-    name: Pequeño Mundo
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - run: pip install -r requirements.txt
-
-      - name: Descargar catálogo (SQLite temporal)
-        run: python scraper/pequenomundo.py
+        run: ${{ matrix.run }}
 
       - name: Subir a Turso
         env:
