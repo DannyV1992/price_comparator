@@ -1,0 +1,37 @@
+version: 2
+
+models:
+  - name: int_products__enriched
+    description: Productos con el nombre de su tienda y de su categoría.
+    columns:
+      - name: store_product_id
+        data_tests: [unique, not_null]
+
+  - name: int_prices__latest
+    description: Último estado de precio conocido de cada producto.
+    columns:
+      - name: store_product_id
+        data_tests: [unique, not_null]
+
+  - name: int_products__matched_by_ean
+    description: Un producto canónico por código de barras normalizado, con el nombre y la marca más repetidos entre tiendas.
+    columns:
+      - name: canonical_product_id
+        data_tests: [unique, not_null]
+      - name: ean_key
+        data_tests: [unique, not_null]
+      - name: canonical_name
+        data_tests: [not_null]
+      - name: n_stores
+        data_tests: [not_null]
+
+  - name: int_offers__best_per_store
+    description: La mejor oferta de cada tienda para cada producto canónico (disponible y más barata).
+    columns:
+      - name: offer_key
+        description: canonical_product_id y store_id juntos; una oferta por producto canónico y tienda.
+        data_tests: [unique, not_null]
+      - name: canonical_product_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('int_products__matched_by_ean'), field: canonical_product_id}}

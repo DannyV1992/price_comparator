@@ -15,6 +15,35 @@ models:
       - name: store_id
         data_tests:
           - relationships: {arguments: {to: ref('dim_stores'), field: store_id}}
+      - name: canonical_product_id
+        description: Producto canónico al que pertenece (NULL si todavía no se pudo cruzar con otras tiendas).
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_canonical_products'), field: canonical_product_id}}
+
+  - name: dim_canonical_products
+    description: El mismo producto visto en una o varias tiendas. Hoy se cruza por código de barras normalizado.
+    columns:
+      - name: canonical_product_id
+        data_tests: [unique, not_null]
+      - name: n_stores
+        description: En cuántas tiendas se vende.
+        data_tests: [not_null]
+
+  - name: fct_price_comparison
+    description: >
+      Precio de cada producto canónico en cada tienda, solo para productos que se venden en 2 o más tiendas.
+      Sirve para saber dónde es más barato y cuánto más caro es en las demás.
+    columns:
+      - name: offer_key
+        data_tests: [unique, not_null]
+      - name: canonical_product_id
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_canonical_products'), field: canonical_product_id}}
+      - name: store_id
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_stores'), field: store_id}}
+      - name: is_price_outlier
+        description: La diferencia entre la tienda más cara y la más barata es de más de 3 veces; el código de barras probablemente agrupa productos distintos.
 
   - name: fct_price_changes
     description: Un evento por cada cambio de precio, precio de lista o disponibilidad.
