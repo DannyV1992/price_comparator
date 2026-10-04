@@ -2,6 +2,9 @@
 
 El scraper escribe en un SQLite local (rápido). Este script copia esa descarga a la base
 de Turso en lotes, para conservar el historial fuera de la máquina que corrió el scraper.
+En Turso solo se agrega una fila a `prices` cuando el precio, el precio de lista o la
+disponibilidad cambian respecto a la última fila del producto; así la tabla no se llena de
+repeticiones. Los datos del producto y `last_seen` se actualizan en cada descarga.
 Se puede repetir sin duplicar datos: si una sincronización se corta, basta volver a lanzarla.
 
 Variables de entorno (o un archivo .env en la raíz del proyecto):
@@ -154,10 +157,27 @@ INSERT_PRICE = """INSERT INTO prices (store_product_id, run_id, scraped_at, pric
     WHERE sp.store_id = ? AND sp.store_item_id = ?
       AND NOT EXISTS (SELECT 1 FROM prices x WHERE x.store_product_id = sp.id AND x.run_id = ?)"""
 
+# Último precio guardado de cada producto de la tienda.
+LATEST_PRICES = """SELECT sp.store_item_id, p.price, p.list_price, p.available_qty
+    FROM store_products sp JOIN prices p ON p.store_product_id = sp.id
+    WHERE sp.store_id = ? AND p.id = (SELECT MAX(id) FROM prices WHERE store_product_id = sp.id)"""
+
+
+def price_state(price, list_price, qty):
+    """Lo que cuenta como un cambio: precio, precio de lista y si hay o no existencias.
+
+    La cantidad exacta no cuenta: cambia a cada rato y llenaría la tabla de filas repetidas.
+    """
+    return (price, list_price, qty is not None and qty > 0)
+
+
+def latest_prices(remote, store_id):
+    return {r[0]: price_state(r[1], r[2], r[3]) for r in remote.execute(LATEST_PRICES, (store_id,))}
+
 
 def sync(remote, local, run_id):
     local.executescript(SCHEMA)  # bases creadas con una versión anterior del esquema
-    run =local.execute("SELECT * FROM scrape_runs WHERE id = ?", (run_id,)).fetchone()
+    run = local.execute("SELECT * FROM scrape_runs WHERE id = ?", (run_id,)).fetchone()
     if run is None:
         sys.exit(f"No existe la descarga {run_id} en la base local")
     if run["status"] == "running":
@@ -205,6 +225,9 @@ def sync(remote, local, run_id):
                   sp.last_seen, p.scraped_at, p.price, p.list_price, p.available_qty
            FROM prices p JOIN store_products sp ON sp.id = p.store_product_id
            WHERE p.run_id = ? ORDER BY p.id""", (run_id,))
+    latest = latest_prices(remote, store_id)
+    print(f"Productos con precio en Turso: {len(latest)}", flush=True)
+    expected = {}  # estado de precio que debe quedar en Turso al terminar
     done = 0
     while True:
         chunk = rows.fetchmany(BATCH_ROWS)
@@ -212,12 +235,14 @@ def sync(remote, local, run_id):
             break
         stmts = []
         for r in chunk:
-            stmts.append((UPSERT_PRODUCT, (store_id, *r[0:13])))
-            stmts.append((INSERT_PRICE, (remote_run, r[13], r[14], r[15], r[16], store_id, r[0], remote_run)))
+            stmts.append((UPSERT_PRODUCT, (store_id, *r[0:13])))  # mantiene al día datos y last_seen
+            state = expected[r[0]] = price_state(r[14], r[15], r[16])
+            if latest.get(r[0]) != state:
+                stmts.append((INSERT_PRICE, (remote_run, r[13], r[14], r[15], r[16], store_id, r[0], remote_run)))
         remote.batch(stmts)
         done += len(chunk)
         if done % (BATCH_ROWS * 10) == 0 or done == total:
-            print(f"  {done}/{total} precios subidos", flush=True)
+            print(f"  {done}/{total} productos procesados", flush=True)
 
     run_cats = local.execute("SELECT category_path, name, reported_total, downloaded, retries "
                              "FROM scrape_run_categories WHERE run_id = ?", (run_id,)).fetchall()
@@ -228,14 +253,18 @@ def sync(remote, local, run_id):
         for c in run_cats
     ])
 
-    uploaded = remote.execute("SELECT COUNT(*) FROM prices WHERE run_id = ?", (remote_run,))[0][0]
-    if uploaded != total:
-        sys.exit(f"Faltan datos en Turso: subidos {uploaded} de {total}. Vuelve a lanzar la sincronización.")
+    after = latest_prices(remote, store_id)
+    bad = sum(1 for item, state in expected.items() if after.get(item) != state)
+    if bad:
+        sys.exit(f"Faltan datos en Turso: {bad} productos sin el precio esperado. Vuelve a lanzar la sincronización.")
+    changed = remote.execute("SELECT COUNT(*) FROM prices WHERE run_id = ?", (remote_run,))[0][0]
+    notes = "; ".join(filter(None, [run["notes"], f"precios nuevos o modificados: {changed}"]))
     remote.execute(
         "UPDATE scrape_runs SET finished_at = ?, status = ?, products_seen = ?, items_seen = ?, notes = ? WHERE id = ?",
-        (run["finished_at"], run["status"], run["products_seen"], run["items_seen"], run["notes"], remote_run),
+        (run["finished_at"], run["status"], run["products_seen"], run["items_seen"], notes, remote_run),
     )
-    print(f"Listo. Descarga {run['started_at']} sincronizada como id {remote_run} ({uploaded} precios).")
+    print(f"Listo. Descarga {run['started_at']} sincronizada como id {remote_run}: "
+          f"{total} productos, {changed} con precio nuevo o modificado.")
     return run["status"]
 
 

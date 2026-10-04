@@ -18,6 +18,8 @@ Todo queda en `data/comparador.db` (no se sube a git). Cada ejecución agrega un
 
 Secretos del repositorio (Settings → Secrets and variables → Actions): `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`.
 
+**En Turso, `prices` solo guarda cambios.** Se agrega una fila cuando el precio, el precio de lista o la disponibilidad (hay / no hay existencias) cambian respecto a la última fila del producto. La cantidad exacta no cuenta como cambio. Para saber el precio de un producto en una fecha, se toma su última fila hasta esa fecha; un precio `0` significa agotado. Que el producto siga en el catálogo lo dice `store_products.last_seen`, y cada descarga queda en `scrape_runs` (en `notes` se anota cuántos precios cambiaron). El SQLite local, en cambio, guarda una fila por producto en cada descarga.
+
 Para subir a mano la última descarga local, define las mismas dos variables (o un archivo `.env` en la raíz, ignorado por git) y ejecuta:
 ```
 python scraper/sync_turso.py
