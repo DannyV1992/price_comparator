@@ -1,0 +1,80 @@
+version: 2
+
+models:
+  - name: stores
+    description: Una fila por tienda.
+    columns:
+      - name: store_id
+        data_tests: [unique, not_null]
+      - name: store_name
+        data_tests: [unique, not_null]
+
+  - name: categories
+    description: Árbol de categorías de cada tienda.
+    columns:
+      - name: category_key
+        description: store_id y store_category_id juntos; identifica la categoría.
+        data_tests: [unique, not_null]
+      - name: store_id
+        data_tests:
+          - relationships: {arguments: {to: ref('stores'), field: store_id}}
+
+  - name: products
+    description: Un producto por SKU de tienda. ean_key sirve para cruzar productos entre tiendas.
+    columns:
+      - name: store_product_id
+        data_tests: [unique, not_null]
+      - name: product_key
+        data_tests: [unique, not_null]
+      - name: store_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('stores'), field: store_id}}
+      - name: product_name
+        data_tests: [not_null]
+      - name: ean_key
+        description: Código de barras normalizado a 14 dígitos; NULL si la tienda no lo publica o es un código de balanza.
+      - name: first_seen_at
+        data_tests: [not_null]
+      - name: last_seen_at
+        data_tests: [not_null]
+
+  - name: prices
+    description: Historial de precios, una fila por cambio de precio, precio de lista o disponibilidad.
+    columns:
+      - name: price_id
+        data_tests: [unique, not_null]
+      - name: store_product_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('products'), field: store_product_id}}
+      - name: run_id
+        data_tests:
+          - relationships: {arguments: {to: ref('scrape_runs'), field: run_id}}
+      - name: scraped_at
+        data_tests: [not_null]
+      - name: is_available
+        data_tests: [not_null]
+
+  - name: current_prices
+    description: Último estado de precio de cada producto.
+    columns:
+      - name: store_product_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships: {arguments: {to: ref('products'), field: store_product_id}}
+
+  - name: scrape_runs
+    description: Una fila por descarga de una tienda.
+    columns:
+      - name: run_id
+        data_tests: [unique, not_null]
+      - name: store_id
+        data_tests:
+          - relationships: {arguments: {to: ref('stores'), field: store_id}}
+      - name: started_at
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - accepted_values: {arguments: {values: [running, syncing, ok, partial, error]}}

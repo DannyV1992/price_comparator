@@ -50,7 +50,14 @@ pip install -r requirements-databricks.txt
 python scraper/sync_databricks.py
 ```
 
-Capas: `raw` (como llegan), `refined` (limpio, tipado, EAN normalizado) y `analytics` (productos equivalentes y tablas para BI).
+Capas: `raw` (como llegan), `refined` (limpio, tipado, EAN normalizado) y `analytics` (productos equivalentes y tablas para BI). El diagrama y las decisiones están en [docs/arquitectura.md](docs/arquitectura.md).
+
+### dbt
+`dbt/` tiene los modelos de `refined` (`stores`, `categories`, `products`, `prices`, `current_prices`, `scrape_runs`), la macro `normalize_ean` y las pruebas de calidad. En el flujo diario corre como último trabajo, después de la carga a Databricks. A mano, con las variables de Databricks en el entorno:
+```
+pip install -r dbt/requirements.txt
+dbt build --project-dir dbt --profiles-dir dbt
+```
 
 ## Tablas
 - `stores`: tiendas

@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Copia de Turso tal como llega (la carga la hace scraper/sync_databricks.py).
+    database: comparador_precios
+    schema: raw
+    tables:
+      - name: stores
+      - name: categories
+      - name: scrape_runs
+      - name: scrape_run_categories
+      - name: store_products
+      - name: prices
