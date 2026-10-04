@@ -1,9 +1,9 @@
-"""Descarga el catálogo de Más x Menos (API pública de VTEX) a SQLite.
+"""Descarga el catálogo de una tienda que usa VTEX (API pública) a SQLite.
 
 Uso:
-    python scraper/masxmenos.py --only-categories       # solo el árbol de categorías
-    python scraper/masxmenos.py --category 15 --max-pages 2   # prueba pequeña
-    python scraper/masxmenos.py                         # descarga completa
+    python scraper/vtex.py masxmenos --only-categories       # solo el árbol de categorías
+    python scraper/vtex.py walmart --category 15 --max-pages 2   # prueba pequeña
+    python scraper/vtex.py masxmenos                         # descarga completa
 """
 import argparse
 import json
@@ -18,16 +18,18 @@ import httpx
 
 from db import connect
 
-STORE_NAME = "Más x Menos"
-SITE = "https://www.masxmenos.cr"
-API = SITE + "/api/catalog_system/pub"
+STORES = {  # clave de línea de comandos -> (nombre en la base, sitio)
+    "masxmenos": ("Más x Menos", "https://www.masxmenos.cr"),
+    "walmart": ("Walmart", "https://www.walmart.co.cr"),
+}
 PAGE_SIZE = 50
 MAX_FROM = 2500  # VTEX responde 400 si _from > 2500
 GAP_THRESHOLD = 0.95  # bajo este porcentaje de lo esperado, la categoría se marca incompleta
 
 
 class Client:
-    def __init__(self, pause=(1.0, 2.0)):
+    def __init__(self, site, pause=(1.0, 2.0)):
+        self.api = site + "/api/catalog_system/pub"
         self.pause = pause
         self.retries = 0
         self.http = httpx.Client(
@@ -56,14 +58,14 @@ class Client:
         raise RuntimeError(f"Falló tras varios intentos: {url}")
 
     def tree(self):
-        return self.get(f"{API}/category/tree/4").json()
+        return self.get(f"{self.api}/category/tree/4").json()
 
     def search(self, category_path, start):
         """Devuelve (productos, total) para una categoría, p. ej. '11/123'."""
         params = {"_from": start, "_to": start + PAGE_SIZE - 1}
         if category_path:
             params["fq"] = f"C:/{category_path}/"
-        r = self.get(f"{API}/products/search", params)
+        r = self.get(f"{self.api}/products/search", params)
         m = re.search(r"/(\d+)$", r.headers.get("resources", ""))
         total = int(m.group(1)) if m else 0
         return (r.json() if r.content else []), total
@@ -73,9 +75,9 @@ def now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def get_store_id(conn):
-    conn.execute("INSERT OR IGNORE INTO stores (name, website) VALUES (?, ?)", (STORE_NAME, SITE))
-    return conn.execute("SELECT id FROM stores WHERE name = ?", (STORE_NAME,)).fetchone()["id"]
+def get_store_id(conn, name, site):
+    conn.execute("INSERT OR IGNORE INTO stores (name, website) VALUES (?, ?)", (name, site))
+    return conn.execute("SELECT id FROM stores WHERE name = ?", (name,)).fetchone()["id"]
 
 
 def save_categories(conn, store_id, nodes, parent=None, level=1):
@@ -168,10 +170,11 @@ def walk(client, node, parent_path, handle, record, max_pages):
             walk(client, child, path, handle, record, max_pages)
 
 
-def run(category=None, max_pages=None, only_categories=False):
+def run(store, category=None, max_pages=None, only_categories=False):
+    name, site = STORES[store]
     conn = connect()
-    store_id = get_store_id(conn)
-    client = Client()
+    store_id = get_store_id(conn, name, site)
+    client = Client(site)
 
     tree = client.tree()
     save_categories(conn, store_id, tree)
@@ -230,6 +233,9 @@ def run(category=None, max_pages=None, only_categories=False):
             print(f"Productos únicos descargados: {len(seen_products)} (el sitio reporta {site_total})")
             if gaps:
                 notes += "; categorías incompletas: " + ", ".join(gaps)
+            if len(seen_products) < GAP_THRESHOLD * site_total:
+                status = "partial"
+                notes += f"; descarga incompleta ({len(seen_products)}/{site_total})"
         conn.execute(
             "UPDATE scrape_runs SET finished_at = ?, status = ?, products_seen = ?, items_seen = ?, notes = ? WHERE id = ?",
             (now(), status, len(seen_products), len(seen_items), notes, run_id),
@@ -240,9 +246,10 @@ def run(category=None, max_pages=None, only_categories=False):
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
-    ap = argparse.ArgumentParser(description="Descarga el catálogo de Más x Menos")
+    ap = argparse.ArgumentParser(description="Descarga el catálogo de una tienda VTEX")
+    ap.add_argument("store", choices=STORES, help="tienda a descargar")
     ap.add_argument("--only-categories", action="store_true", help="solo guarda el árbol de categorías")
     ap.add_argument("--category", help="id de una categoría raíz (descarga parcial)")
     ap.add_argument("--max-pages", type=int, help="máximo de páginas de 50 por categoría (para pruebas)")
     args = ap.parse_args()
-    run(args.category, args.max_pages, args.only_categories)
+    run(args.store, args.category, args.max_pages, args.only_categories)

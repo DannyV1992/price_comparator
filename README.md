@@ -1,15 +1,16 @@
 # comparador-super
 
-Comparador de precios de supermercado. Tiendas descargadas hoy: **Más x Menos** (VTEX) y **Pequeño Mundo** (Magento GraphQL).
+Comparador de precios de supermercado. Tiendas descargadas hoy: **Más x Menos** y **Walmart** (ambas VTEX) y **Pequeño Mundo** (Magento GraphQL).
 
 ## Requisitos
 - Python 3.12, `httpx` y `curl_cffi` (`pip install -r requirements.txt`). Pequeño Mundo usa `curl_cffi` porque Cloudflare bloquea a `httpx` por su huella TLS.
 
 ## Uso
 ```
-python scraper/masxmenos.py --only-categories          # solo categorías
-python scraper/masxmenos.py --category 15 --max-pages 2 # prueba pequeña
-python scraper/masxmenos.py                            # descarga completa (~30 min)
+python scraper/vtex.py masxmenos --only-categories    # solo categorías
+python scraper/vtex.py walmart --category 15 --max-pages 2  # prueba pequeña
+python scraper/vtex.py masxmenos                       # descarga completa (~30 min)
+python scraper/vtex.py walmart                         # Walmart completo (~1 h, 37.000 productos)
 python scraper/pequenomundo.py                         # Pequeño Mundo completo (~2 min)
 ```
 Todo queda en `data/comparador.db` (no se sube a git). Cada ejecución agrega un precio nuevo por producto, así se arma el historial.
