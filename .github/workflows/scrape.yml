@@ -2,7 +2,7 @@ name: Descarga diaria de precios
 
 on:
   schedule:
-    - cron: "0 9 * * *"  # 09:00 UTC = 03:00 en Costa Rica
+    - cron: "0 15 * * *"  # 15:00 UTC = 09:00 en Costa Rica
   workflow_dispatch:      # también se puede lanzar a mano desde la pestaña Actions
     inputs:
       store:

@@ -102,3 +102,26 @@ models:
     columns:
       - name: product_key
         data_tests: [unique, not_null]
+
+  - name: web_products
+    description: >
+      Productos que se pueden elegir en la web: cada producto canónico y cada producto sin cruzar
+      (id 'sku-<store_product_id>', de una sola tienda). Base de la lista de compras.
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+      - name: product_name
+        data_tests: [not_null]
+
+  - name: web_offers
+    description: Precio de cada producto de web_products en cada tienda (una fila por producto y tienda).
+    columns:
+      - name: offer_key
+        data_tests: [unique, not_null]
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('web_products'), field: product_id}}
+      - name: store_id
+        data_tests:
+          - relationships: {arguments: {to: ref('dim_stores'), field: store_id}}

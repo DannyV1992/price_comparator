@@ -30,7 +30,7 @@ Notas por tienda:
 - **Perimercados** vende en línea por `peridomicilio.com` (`perimercados.com` es un dominio estacionado). Misma plataforma que Megasuper, tienda 133. Su `sku` es interno; el `ean` es real en ~97% de los productos y un código corto de balanza en frutas y verduras (sirve normalizarlo con cuidado al cruzar: los códigos de menos de 8 dígitos no son códigos de barras).
 
 ## Automatización (Turso + GitHub Actions)
-`.github/workflows/scrape.yml` descarga cada tienda a diario a las 03:00 (hora de Costa Rica), en un trabajo independiente por tienda, con un SQLite temporal, y lo sube a Turso con `sync/to_turso.py`. Esa sincronización se puede repetir sin duplicar datos. Cada trabajo termina en rojo si la descarga no queda en estado `ok`.
+`.github/workflows/scrape.yml` descarga cada tienda a diario a las 09:00 (hora de Costa Rica), en un trabajo independiente por tienda, con un SQLite temporal, y lo sube a Turso con `sync/to_turso.py`. Esa sincronización se puede repetir sin duplicar datos. Cada trabajo termina en rojo si la descarga no queda en estado `ok`.
 
 Secretos del repositorio (Settings → Secrets and variables → Actions): `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`.
 
@@ -58,11 +58,21 @@ python -m sync.to_databricks
 Capas (una por esquema): `raw` (como llegan), `refined` (staging de dbt: limpio y tipado, EAN normalizado), `intermediate` (transformaciones previas a los marts) y `analytics` (marts de dbt: `dim_` y `fct_`, para BI). El diagrama y las decisiones están en [docs/arquitectura.md](docs/arquitectura.md).
 
 ### dbt
-`dbt/` sigue la convención de dbt: `models/staging/turso` (`stg_turso__*`, vistas en `refined`), `models/intermediate` (`int_*`, vistas en `intermediate`) y `models/marts` (`dim_stores`, `dim_products`, `dim_canonical_products`, `fct_price_changes`, `fct_current_prices`, `fct_daily_prices`, `fct_price_comparison`, `fct_scrape_runs`, `fct_scrape_coverage`, `fct_match_review`, `fct_store_price_index`, `fct_basket_prices`, tablas en `analytics`). `models/utilities` tiene el calendario (`all_dates`) y `seeds/` los datos de apoyo escritos a mano en CSV (`store_info`, `basket_items`, `category_mapping`, `brand_aliases`, `match_overrides`; los tres últimos están vacíos). Los productos sin código de barras se cruzan por nombre y tamaño; los casos dudosos salen en `fct_match_review` y se resuelven agregando una fila a `match_overrides.csv` (`confirmed` o `rejected`). Incluye la macro `normalize_ean` y las pruebas de calidad. En el flujo diario corre como último trabajo, después de la carga a Databricks. A mano, con las variables de Databricks en el entorno:
+`dbt/` sigue la convención de dbt: `models/staging/turso` (`stg_turso__*`, vistas en `refined`), `models/intermediate` (`int_*`, vistas en `intermediate`) y `models/marts` (`dim_stores`, `dim_products`, `dim_canonical_products`, `fct_price_changes`, `fct_current_prices`, `fct_daily_prices`, `fct_price_comparison`, `fct_scrape_runs`, `fct_scrape_coverage`, `fct_match_review`, `fct_store_price_index`, `fct_basket_prices`, `web_products`, `web_offers`, tablas en `analytics`). `models/utilities` tiene el calendario (`all_dates`) y `seeds/` los datos de apoyo escritos a mano en CSV (`store_info`, `basket_items`, `category_mapping`, `brand_aliases`, `match_overrides`; los tres últimos están vacíos). Los productos sin código de barras se cruzan por nombre y tamaño; los casos dudosos salen en `fct_match_review` y se resuelven agregando una fila a `match_overrides.csv` (`confirmed` o `rejected`). Incluye la macro `normalize_ean` y las pruebas de calidad. En el flujo diario corre como último trabajo, después de la carga a Databricks. A mano, con las variables de Databricks en el entorno:
 ```
 pip install -r dbt/requirements.txt
 dbt build --project-dir dbt --profiles-dir dbt
 ```
+
+## Web (`web/`)
+Página para armar una lista de compras eligiendo cada producto (Next.js). Por ahora: búsqueda sin distinguir tildes y una lista guardada en el navegador. La web no lee de Databricks: lee un SQLite que se genera a partir de los marts `web_products` y `web_offers` (que incluyen los productos sin cruzar, como una tienda sola; sin ellos Automercado casi no aparecería).
+```
+python -m sync.to_web          # escribe data/web.db desde Databricks (necesita las variables de Databricks)
+cd web
+npm install
+npm run dev                    # http://localhost:3000
+```
+Para publicarla, `WEB_DATABASE_URL` y `WEB_AUTH_TOKEN` apuntan a una base de Turso con las mismas tablas (todavía no hay paso que la cargue).
 
 ## Tablas
 - `stores`: tiendas

@@ -46,7 +46,8 @@ def decode(value):
     if kind == "float":
         return float(value["value"])
     if kind == "blob":
-        return base64.b64decode(value["base64"])
+        data = value["base64"]
+        return base64.b64decode(data + "=" * (-len(data) % 4))  # Turso omite el relleno "="
     return value["value"]
 
 
