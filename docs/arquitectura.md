@@ -19,7 +19,7 @@ flowchart LR
 
     T[(Turso<br/>solo cambios de precio)]
 
-    subgraph DBX["Databricks · catálogo comparador_precios"]
+    subgraph DBX["Databricks · catálogo supermarket_prices"]
         R[raw<br/>como llega]
         F[refined · dbt staging<br/>limpio y tipado<br/>EAN normalizado]
         I[intermediate · dbt<br/>transformaciones previas]
@@ -52,7 +52,7 @@ productos entre tiendas, Power BI y la demo pública están pendientes.
   escribiendo a la vez en las mismas tablas chocarían.
 - **La carga a Databricks y dbt son trabajos aparte**: si fallan, las descargas ya hechas
   no se pierden, pero la corrida sale en rojo y llega el aviso por correo.
-- **Capas y convención de dbt.** Cada capa de dbt tiene su esquema en el catálogo `comparador_precios`:
+- **Capas y convención de dbt.** Cada capa de dbt tiene su esquema en el catálogo `supermarket_prices`:
   `raw` es una copia fiel de Turso (fechas como texto, ids de Turso); `refined` es *staging* (modelos
   `stg_turso__*`, uno por tabla: renombrar, tipar, limpiar); `intermediate` guarda las transformaciones
   previas (`int_*`) que hagan falta para llegar a los marts; `analytics` son los *marts* (`dim_*` y `fct_*`),

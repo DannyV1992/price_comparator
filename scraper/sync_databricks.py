@@ -27,7 +27,7 @@ from databricks import sql
 
 from sync_turso import Turso, load_env
 
-CATALOG = "comparador_precios"
+CATALOG = "supermarket_prices"
 SCHEMA = "raw"
 VOLUME = "landing"
 PAGE = 20000  # filas por archivo
