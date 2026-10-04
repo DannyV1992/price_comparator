@@ -41,6 +41,17 @@ Para subir a mano la última descarga local, define las mismas dos variables (o 
 python scraper/sync_turso.py
 ```
 
+## Databricks (lakehouse)
+Después de que terminan todas las tiendas, un trabajo final (`Cargar a Databricks`) copia Turso al catálogo `comparador_precios`, esquema `raw`, en tablas Delta (`stores`, `categories`, `scrape_runs`, `scrape_run_categories`, `store_products`, `prices`) con `scraper/sync_databricks.py`. Los datos llegan tal como están en Turso (ids de Turso, fechas como texto, sin el JSON original); `refined` y `analytics` se construyen a partir de `raw`. Es un paso extra: si falla, la descarga diaria no se ve afectada. Se puede repetir sin duplicar: `prices` continúa desde el mayor id que ya hay y las demás tablas se mezclan con `MERGE`.
+
+Secretos adicionales: `DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH` y `DATABRICKS_TOKEN`. Para correrlo a mano, las mismas tres variables (más las de Turso) en `.env`:
+```
+pip install -r requirements-databricks.txt
+python scraper/sync_databricks.py
+```
+
+Capas: `raw` (como llegan), `refined` (limpio, tipado, EAN normalizado) y `analytics` (productos equivalentes y tablas para BI).
+
 ## Tablas
 - `stores`: tiendas
 - `categories`: árbol de categorías de cada tienda

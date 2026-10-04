@@ -41,3 +41,32 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: python scraper/sync_turso.py --fail-unless-ok
+
+  # Cuando terminan todas las tiendas, copia Turso a Databricks (esquema raw). Es un paso extra:
+  # si falla, la descarga diaria no se ve afectada.
+  databricks:
+    name: Cargar a Databricks
+    needs: scrape
+    if: ${{ !cancelled() }}  # corre aunque alguna tienda haya fallado
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-databricks.txt
+
+      - run: pip install -r requirements-databricks.txt
+
+      - name: Copiar Turso a Databricks
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: python scraper/sync_databricks.py
