@@ -1,0 +1,30 @@
+name: Prueba de acceso a Pequeño Mundo
+
+# Solo se lanza a mano. Comprueba si Cloudflare deja pasar a los servidores de GitHub.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install curl_cffi httpx
+
+      - name: Consultar el GraphQL de la tienda
+        run: |
+          python - <<'EOF'
+          import httpx
+          from curl_cffi import requests
+          Q = '{products(search:"leche",pageSize:2){total_count items{name sku price_range{minimum_price{final_price{value currency}}}}}}'
+          URL = "https://tienda.pequenomundo.com/graphql"
+          r = httpx.post(URL, json={"query": Q}, timeout=40)
+          print("httpx       ->", r.status_code, r.text[:120].replace("\n", " "))
+          for imp in ("chrome", "safari17_0"):
+              r = requests.post(URL, json={"query": Q}, impersonate=imp, timeout=40)
+              print(f"curl_cffi {imp:10} ->", r.status_code, r.text[:120].replace("\n", " "))
+          EOF
