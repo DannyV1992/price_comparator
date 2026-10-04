@@ -72,7 +72,7 @@ jobs:
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: python scraper/sync_turso.py --fail-unless-ok
+        run: python -m sync.to_turso --fail-unless-ok
 
   # Cuando terminan las tiendas, copia Turso a Databricks (esquema raw). Una falla aquí no afecta
   # a las descargas (son trabajos aparte), pero sí se ve en rojo y dispara el aviso por correo.
@@ -100,7 +100,7 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        run: python scraper/sync_databricks.py
+        run: python -m sync.to_databricks
 
   # Transforma raw -> refined (y más adelante analytics) con dbt y corre sus pruebas de calidad.
   dbt:
@@ -142,4 +142,4 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
-        run: python3 scraper/notify_failure.py
+        run: python3 ops/notify_failure.py

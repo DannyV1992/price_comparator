@@ -15,7 +15,7 @@ Variables de entorno (o un archivo .env en la raíz del proyecto), además de la
     DATABRICKS_TOKEN       token personal
 
 Uso:
-    python scraper/sync_databricks.py
+    python -m sync.to_databricks
 """
 import json
 import os
@@ -25,7 +25,7 @@ from pathlib import Path
 
 from databricks import sql
 
-from sync_turso import Turso, load_env
+from sync.common import Turso, load_env
 
 CATALOG = "supermarket_prices"
 SCHEMA = "raw"

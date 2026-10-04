@@ -12,7 +12,7 @@ Variables de entorno:
     SMTP_HOST       por defecto smtp.gmail.com (puerto 465, SSL)
 
 Uso de prueba, sin enviar nada:
-    python scraper/notify_failure.py --dry-run --conclusion success
+    python ops/notify_failure.py --dry-run --conclusion success
 """
 import argparse
 import json

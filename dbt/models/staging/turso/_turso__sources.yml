@@ -3,7 +3,7 @@ version: 2
 sources:
   - name: turso
     description: >
-      Copia de la base de Turso tal como llega a Databricks (la carga la hace scraper/sync_databricks.py).
+      Copia de la base de Turso tal como llega a Databricks (la carga la hace sync/to_databricks.py).
       Fechas como texto e ids de Turso.
     database: supermarket_prices
     schema: raw
