@@ -11,13 +11,13 @@ export type Offer = {
   outlier: boolean;
 };
 
-export type Substitute = { productId: string; name: string };
+export type Substitute = { productId: string; name: string; qty?: number }; // qty: unidades del reemplazo por cada unidad del original
 
 export type Wanted = {
   productId: string;
   name: string;
   qty: number;
-  subs?: Record<string, Substitute>; // id de la tienda -> reemplazo en esa tienda
+  subs?: Record<string, Substitute>; // id de la tienda -> reemplazo en esa tienda (sustituye al original aunque esté disponible)
 };
 
 export type UsableOffer = Offer & { price: number };
@@ -31,7 +31,8 @@ export type Cell =
 export type Row = {
   item: Wanted;
   cells: Map<number, Cell>; // por tienda
-  minPrice: number | null; // el precio más bajo del producto elegido (sin contar reemplazos)
+  minPrice: number | null; // el precio más bajo del producto, contando los reemplazos (con su cantidad)
+  maxPrice: number | null; // el más alto; null si todos cuestan igual o hay uno solo
   outlier: boolean;
 };
 
@@ -49,6 +50,10 @@ export type Comparison = {
   bestComplete: StoreTotal | null; // la tienda más barata entre las que tienen todo
   split: { total: number; missing: number }; // comprando lo más barato de cada producto donde esté
 };
+
+// Lo que cuesta la celda por cada unidad del producto de la lista: con un reemplazo, su precio por su cantidad.
+export const cellPrice = (c: { offer: UsableOffer; substitute?: Substitute }) =>
+  c.offer.price * (c.substitute?.qty ?? 1);
 
 // Un precio de 0 o un producto sin existencias no cuenta como disponible.
 export const isUsable = (o: Offer | undefined): o is UsableOffer =>
@@ -73,14 +78,11 @@ export function buildComparison(
     const cells = new Map<number, Cell>();
     for (const storeId of storeNames.keys()) {
       const original = own.get(storeId);
-      if (isUsable(original)) {
-        cells.set(storeId, { status: "price", offer: original });
-        continue;
-      }
-      // El producto elegido no está disponible aquí: se usa el reemplazo, si hay uno.
+      // Si elegí un reemplazo para esta tienda, se usa aunque el producto original esté disponible.
       const substitute = item.subs?.[String(storeId)];
       if (!substitute) {
-        cells.set(storeId, original ? { status: "out" } : { status: "none" });
+        if (isUsable(original)) cells.set(storeId, { status: "price", offer: original });
+        else cells.set(storeId, original ? { status: "out" } : { status: "none" });
         continue;
       }
       const replacement = byProduct.get(substitute.productId)?.get(storeId);
@@ -90,11 +92,12 @@ export function buildComparison(
       );
     }
 
-    const prices = [...cells.values()].flatMap((c) => (c.status === "price" && !c.substitute ? [c.offer.price] : []));
+    const prices = [...cells.values()].flatMap((c) => (c.status === "price" ? [cellPrice(c)] : []));
     return {
       item,
       cells,
       minPrice: prices.length ? Math.min(...prices) : null,
+      maxPrice: prices.length > 1 && Math.max(...prices) > Math.min(...prices) ? Math.max(...prices) : null,
       outlier: [...own.values()].some((o) => o.outlier),
     };
   });
@@ -108,7 +111,7 @@ export function buildComparison(
       if (cell?.status === "price") {
         covered += 1;
         if (cell.substitute) substituted += 1;
-        total += cell.offer.price * row.item.qty;
+        total += cellPrice(cell) * row.item.qty;
       }
     }
     return { storeId, storeName, covered, substituted, total };
@@ -117,9 +120,10 @@ export function buildComparison(
   stores.sort((a, b) => b.covered - a.covered || a.total - b.total);
 
   const complete = stores.filter((s) => s.covered === rows.length);
-  const bestComplete = rows.length > 0 && complete.length ? complete.reduce((a, b) => (b.total < a.total ? b : a)) : null;
+  const bestComplete =
+    rows.length > 0 && complete.length ? complete.reduce((a, b) => (b.total < a.total ? b : a)) : null;
 
-  // "Lo más barato de cada producto" solo usa el producto elegido: un reemplazo es otro producto.
+  // "Lo más barato de cada producto" también cuenta los reemplazos que elegí: así nunca sale más caro que una tienda completa.
   let splitTotal = 0;
   let missing = 0;
   for (const row of rows) {

@@ -11,7 +11,12 @@ export function Search() {
   const [query, setQuery] = useState("");
   const [stores, setStores] = useState<Store[]>([]);
   const [selected, setSelected] = useState<number[]>([]); // vacío = todas las tiendas
-  const [result, setResult] = useState<{ key: string; products: ProductHit[] }>({ key: "", products: [] });
+  const [result, setResult] = useState<{ key: string; products: ProductHit[]; hasMore: boolean }>({
+    key: "",
+    products: [],
+    hasMore: false,
+  });
+  const [loadingMore, setLoadingMore] = useState(false);
   const list = useList();
   const text = query.trim();
   const filter = [...selected].sort((a, b) => a - b).join(",");
@@ -31,8 +36,8 @@ export function Search() {
       try {
         const url = `/api/search?q=${encodeURIComponent(text)}${filter ? `&stores=${filter}` : ""}`;
         const res = await fetch(url, { signal: controller.signal });
-        const data = (await res.json()) as { products: ProductHit[] };
-        setResult({ key: `${text}|${filter}`, products: data.products });
+        const data = (await res.json()) as { products: ProductHit[]; hasMore: boolean };
+        setResult({ key: `${text}|${filter}`, products: data.products, hasMore: data.hasMore });
       } catch {
         // búsqueda cancelada por una más nueva
       }
@@ -43,6 +48,28 @@ export function Search() {
     };
   }, [text, filter]);
 
+  // «Ver más»: pide la siguiente página y la agrega al final.
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const url = `/api/search?q=${encodeURIComponent(text)}${filter ? `&stores=${filter}` : ""}&offset=${products.length}`;
+      const data = (await (await fetch(url)).json()) as { products: ProductHit[]; hasMore: boolean };
+      setResult((cur) =>
+        cur.key !== key
+          ? cur // la búsqueda cambió mientras llegaba la página
+          : {
+              ...cur,
+              products: [
+                ...cur.products,
+                ...data.products.filter((p) => !cur.products.some((q) => q.productId === p.productId)),
+              ],
+              hasMore: data.hasMore,
+            },
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  };
   const toggle = (id: number) => setSelected((cur) => (cur.includes(id) ? cur.filter((s) => s !== id) : [...cur, id]));
   const loading = text !== "" && result.key !== key;
   const products = text ? result.products : [];
@@ -64,13 +91,13 @@ export function Search() {
           stores={stores}
           isOn={(id) => selected.includes(id)}
           onToggle={toggle}
-          onAll={{ label: "Todas", active: selected.length === 0, run: () => setSelected([]) }}
+          onAll={{ label: "Todos", active: selected.length === 0, run: () => setSelected([]) }}
         />
       )}
       {loading && <p className="hint">Buscando...</p>}
       {!loading && text && products.length === 0 && (
         <p className="hint">
-          Sin resultados para «{text}»{selected.length > 0 && " en las tiendas elegidas"}.
+          Sin resultados para «{text}»{selected.length > 0 && " en los supermercados elegidos"}.
         </p>
       )}
       <ul className="results">
@@ -84,7 +111,7 @@ export function Search() {
                 <span className="meta">
                   {p.brand ? `${p.brand} · ` : ""}
                   <span className="stores" tabIndex={0}>
-                    {p.nStores === 1 ? "1 tienda" : `${p.nStores} tiendas`}
+                    {p.nStores === 1 ? "1 supermercado" : `${p.nStores} supermercados`}
                     <span className="tip" role="tooltip">
                       {p.offers.map((o) => (
                         <span key={o.storeName} className={o.available ? "tip-row" : "tip-row off"}>
@@ -106,9 +133,7 @@ export function Search() {
               </div>
               <button
                 className={qty ? "add added" : "add"}
-                onClick={() =>
-                  addItem({ productId: p.productId, name: p.name, brand: p.brand, imageUrl: p.imageUrl })
-                }
+                onClick={() => addItem({ productId: p.productId, name: p.name, brand: p.brand, imageUrl: p.imageUrl })}
               >
                 {qty ? `En la lista (${qty}) +` : "Agregar"}
               </button>
@@ -116,6 +141,11 @@ export function Search() {
           );
         })}
       </ul>
+      {!loading && result.hasMore && products.length > 0 && (
+        <button className="secondary more" onClick={loadMore} disabled={loadingMore}>
+          {loadingMore ? "Cargando..." : "Ver más resultados"}
+        </button>
+      )}
     </section>
   );
 }

@@ -9,8 +9,11 @@ export default function Home() {
         <h1>Comparador de súper</h1>
         <p>Arma tu lista de compras eligiendo cada producto.</p>
       </header>
-      <Search />
-      <ListPanel />
+      {/* El panel de la lista se queda fijo solo dentro de esta zona; la comparación va debajo, a todo el ancho. */}
+      <div className="work">
+        <Search />
+        <ListPanel />
+      </div>
       <Comparison />
     </main>
   );

@@ -24,7 +24,12 @@ export function Thumb({ src, alt }: { src: string | null; alt: string }) {
 
   return (
     <>
-      <button className="thumb-btn" onClick={() => setOpen(true)} aria-label={`Ampliar foto de ${alt}`} title="Ampliar foto">
+      <button
+        className="thumb-btn"
+        onClick={() => setOpen(true)}
+        aria-label={`Ampliar foto de ${alt}`}
+        title="Ampliar foto"
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="thumb" src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" />
       </button>

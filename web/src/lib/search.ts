@@ -29,7 +29,7 @@ export type StoreHit = {
   url: string | null;
 };
 
-const LIMIT = 30;
+const LIMIT = 30; // resultados por página; «Ver más» pide la siguiente
 
 // Convierte lo que escribe la persona en una consulta FTS5: cada palabra es un prefijo y todas deben aparecer.
 function toFtsQuery(text: string): string | null {
@@ -47,20 +47,24 @@ export async function getStores(): Promise<Store[]> {
   return rows.map((r) => ({ id: Number(r.store_id), name: String(r.store_name) }));
 }
 
-// Con storeIds, solo salen los productos que alguna de esas tiendas tiene con existencias, y el
-// «desde» se calcula entre esas tiendas.
-export async function searchProducts(text: string, storeIds: number[] = []): Promise<ProductHit[]> {
+// Con storeIds, solo salen los productos que alguna de esas tiendas vende (aunque esté agotado, para poder
+// comprobar que existe), y el «desde» se calcula entre las existencias de esas tiendas.
+export async function searchProducts(
+  text: string,
+  storeIds: number[] = [],
+  offset = 0,
+): Promise<{ products: ProductHit[]; hasMore: boolean }> {
   const match = toFtsQuery(text);
-  if (!match) return [];
+  if (!match) return { products: [], hasMore: false };
 
   const marks = storeIds.map(() => "?").join(", ");
   const inStores = storeIds.length ? `AND o.store_id IN (${marks})` : "";
   const sold = storeIds.length
-    ? `AND EXISTS (SELECT 1 FROM offers o WHERE o.product_id = p.product_id AND o.store_id IN (${marks})
-                     AND o.is_available = 1 AND o.price > 0)`
+    ? `AND EXISTS (SELECT 1 FROM offers o WHERE o.product_id = p.product_id AND o.store_id IN (${marks}))`
     : "";
 
-  // Primero los productos que se venden en más tiendas: son los que sirven para comparar.
+  // Primero los que tienen existencias, y entre ellos los que se venden en más tiendas: son los que sirven
+  // para comparar. Los agotados (sin «desde») quedan al final.
   // Los argumentos van en el mismo orden en que aparecen los «?» en el texto.
   const { rows } = await db.execute({
     sql: `SELECT p.product_id, p.name, p.brand, p.image_url, p.n_stores,
@@ -73,11 +77,13 @@ export async function searchProducts(text: string, storeIds: number[] = []): Pro
                  (SELECT MAX(o.is_price_outlier) FROM offers o WHERE o.product_id = p.product_id) AS outlier
           FROM products_fts f JOIN products p ON p.rowid = f.rowid
           WHERE products_fts MATCH ? ${sold}
-          ORDER BY p.n_stores DESC, f.rank
-          LIMIT ${LIMIT}`,
+          ORDER BY min_price IS NULL, p.n_stores DESC, f.rank, p.product_id
+          LIMIT ${LIMIT + 1} OFFSET ${offset}`, // uno de más para saber si hay otra página
     args: [...storeIds, ...storeIds, match, ...storeIds],
   });
-  if (rows.length === 0) return [];
+  const hasMore = rows.length > LIMIT;
+  rows.length = Math.min(rows.length, LIMIT);
+  if (rows.length === 0) return { products: [], hasMore: false };
 
   // Las tiendas de cada resultado, para el cuadro que aparece al pasar el mouse.
   const ids = rows.map((r) => String(r.product_id));
@@ -102,7 +108,7 @@ export async function searchProducts(text: string, storeIds: number[] = []): Pro
     list.sort((a, b) => Number(b.available) - Number(a.available) || (a.price ?? 0) - (b.price ?? 0));
   }
 
-  return rows.map((r) => ({
+  const products = rows.map((r) => ({
     productId: String(r.product_id),
     name: String(r.name),
     brand: str(r.brand),
@@ -113,12 +119,17 @@ export async function searchProducts(text: string, storeIds: number[] = []): Pro
     priceOutlier: Number(r.outlier) === 1,
     offers: byProduct.get(String(r.product_id)) ?? [],
   }));
+  return { products, hasMore };
 }
 
 // Busca entre lo que vende una tienda y tiene existencias.
-export async function searchStoreProducts(text: string, storeId: number): Promise<StoreHit[]> {
+export async function searchStoreProducts(
+  text: string,
+  storeId: number,
+  offset = 0,
+): Promise<{ products: StoreHit[]; hasMore: boolean }> {
   const match = toFtsQuery(text);
-  if (!match) return [];
+  if (!match) return { products: [], hasMore: false };
 
   const { rows } = await db.execute({
     sql: `SELECT p.product_id, p.name, p.brand, p.image_url, o.store_product_name, o.price, o.url
@@ -126,12 +137,13 @@ export async function searchStoreProducts(text: string, storeId: number): Promis
           JOIN products p ON p.rowid = f.rowid
           JOIN offers o ON o.product_id = p.product_id
           WHERE products_fts MATCH ? AND o.store_id = ? AND o.is_available = 1 AND o.price > 0
-          ORDER BY f.rank
-          LIMIT ${LIMIT}`,
+          ORDER BY f.rank, p.product_id
+          LIMIT ${LIMIT + 1} OFFSET ${offset}`,
     args: [match, storeId],
   });
 
-  return rows.map((r) => ({
+  const hasMore = rows.length > LIMIT;
+  const products = rows.slice(0, LIMIT).map((r) => ({
     productId: String(r.product_id),
     name: String(r.name),
     brand: str(r.brand),
@@ -140,4 +152,5 @@ export async function searchStoreProducts(text: string, storeId: number): Promis
     price: Number(r.price),
     url: str(r.url),
   }));
+  return { products, hasMore };
 }

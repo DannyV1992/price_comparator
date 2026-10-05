@@ -3,7 +3,8 @@
 import { useSyncExternalStore } from "react";
 
 // Producto de otra marca o presentación que se usa en una tienda cuando el elegido está agotado allí.
-export type Substitute = { productId: string; name: string };
+// `qty`: cuántas unidades del reemplazo se compran por cada unidad del original (p. ej. 2 sueltas por un paquete de 2).
+export type Substitute = { productId: string; name: string; qty?: number };
 
 export type ListItem = {
   productId: string;
@@ -76,6 +77,15 @@ export function setQty(productId: string, qty: number) {
 
 export function removeItem(productId: string) {
   write(read().filter((i) => i.productId !== productId));
+}
+
+export function getList(): ListItem[] {
+  return read();
+}
+
+// Para cargar una lista guardada en un archivo.
+export function replaceList(items: ListItem[]) {
+  write(items);
 }
 
 export function clearList() {

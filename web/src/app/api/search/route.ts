@@ -6,11 +6,12 @@ import { searchProducts, searchStoreProducts } from "@/lib/search";
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const q = (params.get("q") ?? "").slice(0, 100);
+  const offset = Math.max(0, Math.min(Number(params.get("offset")) || 0, 5000)); // «Ver más»
 
   if (params.has("store")) {
     const store = Number(params.get("store"));
-    if (!Number.isInteger(store)) return Response.json({ products: [] }, { status: 400 });
-    return Response.json({ products: await searchStoreProducts(q, store) });
+    if (!Number.isInteger(store)) return Response.json({ products: [], hasMore: false }, { status: 400 });
+    return Response.json(await searchStoreProducts(q, store, offset));
   }
 
   const stores = (params.get("stores") ?? "")
@@ -19,5 +20,5 @@ export async function GET(request: Request) {
     .map(Number)
     .filter((n) => Number.isInteger(n))
     .slice(0, 20);
-  return Response.json({ products: await searchProducts(q, stores) });
+  return Response.json(await searchProducts(q, stores, offset));
 }

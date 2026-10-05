@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { setSubstitute, useList } from "@/lib/list";
-import { buildComparison, type Offer } from "@/lib/compute";
+import { updateSettings, useSettings } from "@/lib/settings";
+import { buildComparison, cellPrice, isUsable, type Offer } from "@/lib/compute";
 import { formatPrice } from "@/lib/format";
 import type { Store } from "@/lib/search";
 import { StoreChips } from "./StoreChips";
+import { StoreLinks, type LinkEntry } from "./StoreLinks";
 import { SubstituteDialog } from "./SubstituteDialog";
+import { Baseline } from "./Baseline";
+import { Versus } from "./Versus";
 
 type Picker = { productId: string; storeId: number };
 
@@ -15,9 +19,13 @@ export function Comparison() {
   // Se piden los precios de los productos de la lista y de sus reemplazos.
   const ids = new Set(list.flatMap((i) => [i.productId, ...Object.values(i.subs ?? {}).map((s) => s.productId)]));
   const key = [...ids].sort().join("|");
-  const [loaded, setLoaded] = useState<{ key: string; offers: Offer[] }>({ key: "", offers: [] });
+  const [loaded, setLoaded] = useState<{ key: string; offers: Offer[] }>({
+    key: "",
+    offers: [],
+  });
+  // Supermercados ocultos, qué suma el total y el orden de la tabla: se guardan en el navegador junto con la lista.
+  const { hidden, totalMode, sort } = useSettings();
   const [picker, setPicker] = useState<Picker | null>(null);
-  const [hidden, setHidden] = useState<number[]>([]); // tiendas que no quiero ver en la comparación
   const [storeList, setStoreList] = useState<Store[]>([]);
 
   // Todas las tiendas salen como columna, aunque no tengan nada de la lista: así se puede elegir un reemplazo en ellas.
@@ -64,198 +72,363 @@ export function Comparison() {
       ...loaded.offers.map((o) => [o.storeId, { id: o.storeId, name: o.storeName }] as const),
     ]).values(),
   ].sort((a, b) => a.name.localeCompare(b.name));
-  const toggleStore = (id: number) => setHidden((cur) => (cur.includes(id) ? cur.filter((s) => s !== id) : [...cur, id]));
-  const { rows, stores, bestComplete, split } = buildComparison(
-    list,
-    loaded.offers.filter((o) => !hidden.includes(o.storeId)),
-    allStores.filter((s) => !hidden.includes(s.id)),
+  const toggleStore = (id: number) =>
+    updateSettings({ hidden: hidden.includes(id) ? hidden.filter((s) => s !== id) : [...hidden, id] });
+  const shownOffers = loaded.offers.filter((o) => !hidden.includes(o.storeId));
+  const shownStores = allStores.filter((s) => !hidden.includes(s.id));
+  const full = buildComparison(list, shownOffers, shownStores);
+  // «En común»: todas las tiendas elegidas tienen un precio disponible (del producto o de su reemplazo).
+  const common = full.rows.filter(
+    (r) => full.stores.length > 0 && full.stores.every((s) => r.cells.get(s.storeId)?.status === "price"),
   );
+  const { rows: listed, stores, bestComplete, split } = full;
+  // Total de solo lo que tienen todas las tiendas elegidas; se puede ver en la última línea de la tabla.
+  const commonTotals = new Map(
+    stores.map((s) => [
+      s.storeId,
+      common.reduce((sum, r) => {
+        const cell = r.cells.get(s.storeId);
+        return cell?.status === "price" ? sum + cellPrice(cell) * r.item.qty : sum;
+      }, 0),
+    ]),
+  );
+  const commonMode = totalMode === "common" && stores.length > 1;
+  const minCommon = Math.min(...commonTotals.values());
   const top = stores[0];
+  // Con un orden activo, los productos sin precio en esa tienda quedan al final.
+  const sortStore = sort && stores.some((s) => s.storeId === sort.storeId) ? sort : null;
+  const priceIn = (row: (typeof listed)[number]) => {
+    const cell = row.cells.get(sortStore!.storeId);
+    return cell?.status === "price" ? cellPrice(cell) : null;
+  };
+  const sorted = sortStore
+    ? [...listed].sort((a, b) => {
+        const [pa, pb] = [priceIn(a), priceIn(b)];
+        if (pa == null || pb == null) return pa == null ? (pb == null ? 0 : 1) : -1;
+        return sortStore.dir === "asc" ? pa - pb : pb - pa;
+      })
+    : listed;
+  // Con «solo lo que tienen todas», se esconden las filas que no se están sumando.
+  const rows = commonMode ? sorted.filter((r) => common.includes(r)) : sorted;
+  // Un clic en la flecha: de menor a mayor, luego de mayor a menor, luego sin orden.
+  const cycleSort = (storeId: number) =>
+    updateSettings({
+      sort: sort?.storeId !== storeId ? { storeId, dir: "asc" } : sort.dir === "asc" ? { storeId, dir: "desc" } : null,
+    });
   const saving = bestComplete ? bestComplete.total - split.total : 0;
   const storeName = (id: number) => stores.find((s) => s.storeId === id)?.storeName ?? "";
+
+  // Verde: el precio más bajo del producto; rojo: el más alto (los reemplazos también cuentan).
+  const priceClass = (row: (typeof rows)[number], price: number) =>
+    price === row.minPrice ? "best" : price === row.maxPrice ? "worst" : undefined;
+
+  // «Nombre» o «Nombre» ×2, para los textos sobre un reemplazo.
+  const subText = (sub: { name: string; qty?: number }) => `«${sub.name}»${(sub.qty ?? 1) > 1 ? ` ×${sub.qty}` : ""}`;
+
+  // Enlaces a los productos de la comparación en una tienda (los reemplazos apuntan al producto que los reemplaza).
+  const linksFor = (storeId: number): LinkEntry[] =>
+    rows.map((row) => {
+      const cell = row.cells.get(storeId)!;
+      const key = row.item.productId;
+      if (cell.status === "price") {
+        return {
+          key,
+          label: cell.offer.storeProductName ?? row.item.name,
+          price: formatPrice(cellPrice(cell)),
+          url: cell.offer.url,
+        };
+      }
+      return {
+        key,
+        label: row.item.name,
+        note: cell.status === "out" ? "Agotado" : "No lo vende",
+      };
+    });
 
   const pickerItem = picker && list.find((i) => i.productId === picker.productId);
   const notes = rows.flatMap((row) =>
     stores.flatMap((s) => {
       const sub = row.cells.get(s.storeId);
       return sub && "substitute" in sub && sub.substitute
-        ? [{ key: `${row.item.productId}|${s.storeId}`, store: s.storeName, item: row.item.name, sub: sub.substitute.name, out: sub.status === "out" }]
+        ? [
+            {
+              key: `${row.item.productId}|${s.storeId}`,
+              store: s.storeName,
+              item: row.item.name,
+              sub: subText(sub.substitute),
+              out: sub.status === "out",
+            },
+          ]
         : [];
     }),
   );
 
   return (
-    <section className="compare">
-      <h2>Comparación</h2>
+    <>
+      <section className="compare">
+        <h2>Comparación</h2>
 
-      {allStores.length > 1 && (
-        <StoreChips
-          label="Tiendas en la comparación:"
-          stores={allStores}
-          isOn={(id) => !hidden.includes(id)}
-          onToggle={toggleStore}
-          onAll={{ label: "Todas", active: hidden.length === 0, run: () => setHidden([]) }}
-        />
-      )}
-
-      <div className="summary">
-        {bestComplete ? (
-          <p>
-            <b>{bestComplete.storeName}</b> tiene todos tus productos
-            {bestComplete.substituted > 0 && (
-              <> (con {bestComplete.substituted} reemplazo{bestComplete.substituted > 1 ? "s" : ""})</>
-            )}{" "}
-            y es la más barata para comprar todo en un solo lugar: <b>{formatPrice(bestComplete.total)}</b>.
-          </p>
-        ) : top ? (
-          <p>
-            Ninguna tienda tiene todos tus productos. La que más tiene es <b>{top.storeName}</b>: {top.covered} de{" "}
-            {rows.length} por <b>{formatPrice(top.total)}</b>.
-          </p>
-        ) : (
-          <p>{hidden.length > 0 ? "Elige al menos una tienda para comparar." : "Ninguna tienda tiene estos productos ahora."}</p>
+        {allStores.length > 1 && (
+          <StoreChips
+            label="Supermercados en la comparación:"
+            stores={allStores}
+            isOn={(id) => !hidden.includes(id)}
+            onToggle={toggleStore}
+            onAll={{
+              label: "Todos",
+              active: hidden.length === 0,
+              run: () => updateSettings({ hidden: [] }),
+            }}
+          />
         )}
-        {split.total > 0 && (
-          <p>
-            Comprando cada producto donde es más barato pagarías <b>{formatPrice(split.total)}</b>
-            {saving > 0 && <> (ahorras {formatPrice(saving)} frente a {bestComplete?.storeName})</>}
-            {split.missing > 0 && <>, sin contar {split.missing} que no está{split.missing > 1 ? "n" : ""} disponible{split.missing > 1 ? "s" : ""} en ninguna tienda</>}.
-          </p>
-        )}
-      </div>
 
-      {stores.length > 0 && (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Producto</th>
-                {stores.map((s) => (
-                  <th key={s.storeId}>{s.storeName}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.item.productId}>
-                  <th scope="row">
-                    {row.item.name}
-                    {row.item.qty > 1 && <span className="times"> ×{row.item.qty}</span>}
-                    {row.outlier && <em className="warn"> · precios muy distintos, revisa</em>}
-                  </th>
-                  {stores.map((s) => {
-                    const cell = row.cells.get(s.storeId)!;
-                    const open = () => setPicker({ productId: row.item.productId, storeId: s.storeId });
-
-                    if (cell.status === "none") {
-                      return (
-                        <td key={s.storeId} className="none">
-                          <button className="cell-btn" onClick={open} title="Esta tienda no lo vende. Clic para elegir un reemplazo">
-                            —
-                          </button>
-                        </td>
-                      );
-                    }
-                    if (cell.status === "out") {
-                      return (
-                        <td key={s.storeId} className={cell.substitute ? "none replaced-out" : "none"}>
-                          <button className="cell-btn" onClick={open}>
-                            {cell.substitute ? "Reemplazo agotado" : "Agotado"}
-                            <small>{cell.substitute ? "cambiar" : "reemplazar"}</small>
-                          </button>
-                        </td>
-                      );
-                    }
-                    const { offer, substitute } = cell;
-                    const price = offer.url ? (
-                      <a href={offer.url} target="_blank" rel="noreferrer" title={offer.storeProductName ?? undefined}>
-                        {formatPrice(offer.price)}
-                      </a>
-                    ) : (
-                      formatPrice(offer.price)
-                    );
-                    if (substitute) {
-                      return (
-                        <td
-                          key={s.storeId}
-                          className="replaced"
-                          title={`Reemplazo: «${substitute.name}». El producto elegido no está disponible en ${s.storeName}.`}
-                        >
-                          {price}
-                          <button className="cell-btn note" onClick={open}>
-                            ↻ {substitute.name}
-                          </button>
-                        </td>
-                      );
-                    }
-                    return (
-                      <td key={s.storeId} className={offer.price === row.minPrice ? "best" : undefined}>
-                        {price}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr>
-                <th scope="row">Total</th>
-                {stores.map((s) => (
-                  <td key={s.storeId} className={s.covered < rows.length ? "partial" : undefined}>
-                    <b>{formatPrice(s.total)}</b>
-                    {s.covered < rows.length && (
-                      <span className="meta">
-                        {s.covered} de {rows.length}
-                      </span>
-                    )}
-                    {s.substituted > 0 && (
-                      <span className="meta replaced-count">
-                        {s.substituted} reemplazo{s.substituted > 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </td>
-                ))}
-              </tr>
-            </tfoot>
-          </table>
+        <div className="summary">
+          {bestComplete ? (
+            <p>
+              <b>{bestComplete.storeName}</b> tiene todos tus productos
+              {bestComplete.substituted > 0 && (
+                <>
+                  {" "}
+                  (con {bestComplete.substituted} reemplazo
+                  {bestComplete.substituted > 1 ? "s" : ""})
+                </>
+              )}{" "}
+              y es el más barato para comprar todo en un solo lugar: <b>{formatPrice(bestComplete.total)}</b>.
+            </p>
+          ) : top ? (
+            <p>
+              Ningún supermercado tiene todos tus productos. El que más tiene es <b>{top.storeName}</b>: {top.covered}{" "}
+              de {rows.length} por <b>{formatPrice(top.total)}</b>.
+            </p>
+          ) : (
+            <p>
+              {hidden.length > 0
+                ? "Elige al menos un supermercado para comparar."
+                : "Ningún supermercado tiene estos productos ahora."}
+            </p>
+          )}
+          {split.total > 0 && (
+            <p>
+              Comprando cada producto donde es más barato pagarías <b>{formatPrice(split.total)}</b>
+              {saving > 0 && (
+                <>
+                  {" "}
+                  (ahorras {formatPrice(saving)} frente a {bestComplete?.storeName})
+                </>
+              )}
+              {split.missing > 0 && (
+                <>
+                  , sin contar {split.missing} que no está
+                  {split.missing > 1 ? "n" : ""} disponible
+                  {split.missing > 1 ? "s" : ""} en ningún supermercado
+                </>
+              )}
+              .
+            </p>
+          )}
         </div>
-      )}
 
-      {notes.length > 0 && (
-        <ul className="notes">
-          {notes.map((n) => (
-            <li key={n.key}>
-              En <b>{n.store}</b>, «{n.item}» se reemplazó por «{n.sub}»{n.out && " (también está agotado)"}.
-            </li>
-          ))}
-        </ul>
-      )}
+        {stores.length > 0 && (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  {stores.map((s) => (
+                    <th key={s.storeId}>
+                      <StoreLinks
+                        storeName={s.storeName}
+                        entries={linksFor(s.storeId)}
+                        sort={sortStore?.storeId === s.storeId ? sortStore.dir : null}
+                        onSort={() => cycleSort(s.storeId)}
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.item.productId}>
+                    <th scope="row">
+                      {row.item.name}
+                      {row.item.qty > 1 && <span className="times"> ×{row.item.qty}</span>}
+                      {row.outlier && <em className="warn"> · precios muy distintos, revisa</em>}
+                    </th>
+                    {stores.map((s) => {
+                      const cell = row.cells.get(s.storeId)!;
+                      const open = () =>
+                        setPicker({
+                          productId: row.item.productId,
+                          storeId: s.storeId,
+                        });
 
-      <p className="hint">
-        El verde es el precio más bajo de cada producto. El naranja es un reemplazo: otro producto, elegido por ti porque
-        el original no está en esa tienda; cuenta en el total de la tienda pero no en «lo más barato de cada producto».
-        Los totales suman solo lo que la tienda tiene disponible; si le faltan productos, no es comparable con una tienda
-        completa. Haz clic en «Agotado» o en «—» para elegir un reemplazo.
-      </p>
+                      if (cell.status === "none") {
+                        return (
+                          <td key={s.storeId} className="none">
+                            <button
+                              className="cell-btn"
+                              onClick={open}
+                              title="Este supermercado no lo vende. Clic para elegir un reemplazo"
+                            >
+                              —
+                            </button>
+                          </td>
+                        );
+                      }
+                      if (cell.status === "out") {
+                        return (
+                          <td key={s.storeId} className="none">
+                            <button
+                              className="cell-btn"
+                              onClick={open}
+                              title={
+                                cell.substitute ? `Reemplazado por ${subText(cell.substitute)} (agotado)` : undefined
+                              }
+                            >
+                              {cell.substitute ? "Reemplazo agotado" : "Agotado"}
+                              <small>{cell.substitute ? "Cambiar" : "Reemplazar"}</small>
+                            </button>
+                          </td>
+                        );
+                      }
+                      const { offer, substitute } = cell;
+                      const shown = cellPrice(cell);
+                      const price = offer.url ? (
+                        <a
+                          href={offer.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={offer.storeProductName ?? undefined}
+                        >
+                          {formatPrice(shown)}
+                        </a>
+                      ) : (
+                        formatPrice(shown)
+                      );
+                      if (substitute) {
+                        return (
+                          <td key={s.storeId} className={`replaced ${priceClass(row, shown) ?? ""}`}>
+                            {price}
+                            <button
+                              className="cell-btn note"
+                              onClick={open}
+                              title={`Reemplazado por ${subText(substitute)}`}
+                            >
+                              ↻ Reemplazado{(substitute.qty ?? 1) > 1 && ` ×${substitute.qty}`}
+                            </button>
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={s.storeId} className={priceClass(row, shown)}>
+                          {price}
+                          <button
+                            className="cell-btn swap"
+                            onClick={open}
+                            title={`Reemplazar este producto en ${s.storeName}`}
+                          >
+                            ↻ Reemplazar
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row">
+                    {stores.length > 1 ? (
+                      <select
+                        className="total-mode"
+                        value={totalMode}
+                        onChange={(e) => updateSettings({ totalMode: e.target.value as "all" | "common" })}
+                        aria-label="Qué suma el total"
+                      >
+                        <option value="all">Total de lo que está disponible en cada supermercado</option>
+                        <option value="common">Total solo de lo que está disponible en todos los supermercados</option>
+                      </select>
+                    ) : (
+                      "Total"
+                    )}
+                    {commonMode && common.length === 0 && (
+                      <span className="meta">Ningún producto está en todos los supermercados.</span>
+                    )}
+                  </th>
+                  {stores.map((s) =>
+                    commonMode ? (
+                      <td
+                        key={s.storeId}
+                        className={common.length > 0 && commonTotals.get(s.storeId) === minCommon ? "best" : undefined}
+                      >
+                        <b>{common.length > 0 ? formatPrice(commonTotals.get(s.storeId) ?? 0) : "—"}</b>
+                      </td>
+                    ) : (
+                      <td key={s.storeId} className={s.covered < rows.length ? "partial" : undefined}>
+                        <b>{formatPrice(s.total)}</b>
+                        {s.covered < rows.length && (
+                          <span className="meta">
+                            {s.covered} de {rows.length}
+                          </span>
+                        )}
+                        {s.substituted > 0 && (
+                          <span className="meta replaced-count">
+                            {s.substituted} reemplazo
+                            {s.substituted > 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </td>
+                    ),
+                  )}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
 
-      {picker && pickerItem && (
-        <SubstituteDialog
-          itemName={pickerItem.name}
-          excludeProductId={pickerItem.productId}
-          storeId={picker.storeId}
-          storeName={storeName(picker.storeId)}
-          current={pickerItem.subs?.[String(picker.storeId)]}
-          onPick={(sub) => {
-            setSubstitute(pickerItem.productId, picker.storeId, sub);
-            setPicker(null);
-          }}
-          onRemove={() => {
-            setSubstitute(pickerItem.productId, picker.storeId, null);
-            setPicker(null);
-          }}
-          onClose={() => setPicker(null)}
-        />
-      )}
-    </section>
+        {notes.length > 0 && (
+          <ul className="notes">
+            {notes.map((n) => (
+              <li key={n.key}>
+                En <b>{n.store}</b>, «{n.item}» se reemplazó por {n.sub}
+                {n.out && " (también está agotado)"}.
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <p className="hint">
+          El verde es el precio más bajo de cada producto y el rojo el más alto. Un reemplazo se marca con «↻
+          Reemplazado»: es otro producto, elegido por ti para ese supermercado; cuenta en los colores y en los totales,
+          con su cantidad. Los totales suman solo lo que el supermercado tiene disponible; si le faltan productos, no es
+          comparable con un supermercado completo. Haz clic en «Agotado» o en «—» para elegir un reemplazo, o en «↻
+          Reemplazar» (al pasar el mouse por un precio) para cambiar un producto que sí está disponible.
+        </p>
+
+        {picker && pickerItem && (
+          <SubstituteDialog
+            itemName={pickerItem.name}
+            excludeProductId={pickerItem.productId}
+            storeId={picker.storeId}
+            storeName={storeName(picker.storeId)}
+            current={pickerItem.subs?.[String(picker.storeId)]}
+            available={isUsable(
+              loaded.offers.find((o) => o.productId === pickerItem.productId && o.storeId === picker.storeId),
+            )}
+            onPick={(sub) => {
+              setSubstitute(pickerItem.productId, picker.storeId, sub);
+              setPicker(null);
+            }}
+            onRemove={() => {
+              setSubstitute(pickerItem.productId, picker.storeId, null);
+              setPicker(null);
+            }}
+            onClose={() => setPicker(null)}
+          />
+        )}
+      </section>
+      <Versus rows={commonMode ? common : full.rows} stores={stores} onlyCommon={commonMode} />
+      <Baseline rows={commonMode ? common : full.rows} stores={stores} onlyCommon={commonMode} />
+    </>
   );
 }

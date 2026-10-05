@@ -12,6 +12,7 @@ type Props = {
   storeId: number;
   storeName: string;
   current?: Substitute;
+  available?: boolean; // el producto original sí está disponible en la tienda
   onPick: (sub: Substitute) => void;
   onRemove: () => void;
   onClose: () => void;
@@ -20,9 +21,25 @@ type Props = {
 // Las dos primeras palabras del nombre (p. ej. «Arroz precocido»): un buen punto de partida para buscar algo parecido.
 const firstWords = (name: string) => (name.match(/\p{L}+/gu) ?? []).slice(0, 2).join(" ");
 
-export function SubstituteDialog({ itemName, excludeProductId, storeId, storeName, current, onPick, onRemove, onClose }: Props) {
+export function SubstituteDialog({
+  itemName,
+  excludeProductId,
+  storeId,
+  storeName,
+  current,
+  available,
+  onPick,
+  onRemove,
+  onClose,
+}: Props) {
   const [query, setQuery] = useState(() => firstWords(itemName));
-  const [result, setResult] = useState<{ q: string; products: StoreHit[] }>({ q: "", products: [] });
+  const [qty, setQty] = useState(current?.qty ?? 1); // unidades del reemplazo por cada unidad del original
+  const [result, setResult] = useState<{ q: string; products: StoreHit[]; hasMore: boolean }>({
+    q: "",
+    products: [],
+    hasMore: false,
+  });
+  const [loadingMore, setLoadingMore] = useState(false);
   const text = query.trim();
 
   useEffect(() => {
@@ -36,9 +53,11 @@ export function SubstituteDialog({ itemName, excludeProductId, storeId, storeNam
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(text)}&store=${storeId}`, { signal: controller.signal });
-        const data = (await res.json()) as { products: StoreHit[] };
-        setResult({ q: text, products: data.products });
+        const res = await fetch(`/api/search?q=${encodeURIComponent(text)}&store=${storeId}`, {
+          signal: controller.signal,
+        });
+        const data = (await res.json()) as { products: StoreHit[]; hasMore: boolean };
+        setResult({ q: text, products: data.products, hasMore: data.hasMore });
       } catch {
         // búsqueda cancelada por una más nueva
       }
@@ -52,19 +71,64 @@ export function SubstituteDialog({ itemName, excludeProductId, storeId, storeNam
   const loading = text !== "" && result.q !== text;
   const products = (text ? result.products : []).filter((p) => p.productId !== excludeProductId);
 
+  // «Ver más»: pide la siguiente página (el desplazamiento cuenta todo lo ya cargado, también el producto excluido).
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/search?q=${encodeURIComponent(text)}&store=${storeId}&offset=${result.products.length}`,
+      );
+      const data = (await res.json()) as { products: StoreHit[]; hasMore: boolean };
+      setResult((cur) =>
+        cur.q !== text ? cur : { ...cur, products: [...cur.products, ...data.products], hasMore: data.hasMore },
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={`Reemplazar en ${storeName}`} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Reemplazar en ${storeName}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <h3>Reemplazar en {storeName}</h3>
         <p className="meta">
-          «{itemName}» no está disponible en {storeName}. Elige un producto parecido que esta tienda sí tenga; en la tabla
-          quedará marcado como reemplazo.
+          {available
+            ? `«${itemName}» sí está disponible en ${storeName}, pero puedes usar otro producto en su lugar.`
+            : `«${itemName}» no está disponible en ${storeName}.`}{" "}
+          Elige un producto parecido que este supermercado tenga; en la tabla quedará marcado como reemplazo.
         </p>
         {current && (
           <p className="meta">
             Reemplazo actual: <b>{current.name}</b>
+            {(current.qty ?? 1) > 1 && <> ×{current.qty}</>}
+            {qty !== (current.qty ?? 1) && (
+              <>
+                {" "}
+                <button className="clear" onClick={() => onPick({ ...current, qty })}>
+                  Guardar la cantidad
+                </button>
+              </>
+            )}
           </p>
         )}
+        <label className="qty-pick">
+          Unidades del reemplazo por cada «{itemName}»
+          <span className="qty">
+            <button aria-label="Quitar uno" onClick={() => setQty((q) => Math.max(1, q - 1))}>
+              −
+            </button>
+            <span>{qty}</span>
+            <button aria-label="Agregar uno" onClick={() => setQty((q) => q + 1)}>
+              +
+            </button>
+          </span>
+        </label>
         <input
           className="search"
           type="search"
@@ -75,7 +139,11 @@ export function SubstituteDialog({ itemName, excludeProductId, storeId, storeNam
         />
         <div className="dialog-results">
           {loading && <p className="hint">Buscando...</p>}
-          {!loading && text && products.length === 0 && <p className="hint">{storeName} no tiene nada con existencias para «{text}».</p>}
+          {!loading && text && products.length === 0 && (
+            <p className="hint">
+              {storeName} no tiene nada con existencias para «{text}».
+            </p>
+          )}
           <ul className="results">
             {products.map((p) => (
               <li key={p.productId} className="card">
@@ -84,12 +152,17 @@ export function SubstituteDialog({ itemName, excludeProductId, storeId, storeNam
                   <strong>{p.name}</strong>
                   <span className="meta">{formatPrice(p.price)}</span>
                 </div>
-                <button className="add" onClick={() => onPick({ productId: p.productId, name: p.name })}>
+                <button className="add" onClick={() => onPick({ productId: p.productId, name: p.name, qty })}>
                   Usar este
                 </button>
               </li>
             ))}
           </ul>
+          {!loading && result.hasMore && (
+            <button className="secondary more" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? "Cargando..." : "Ver más resultados"}
+            </button>
+          )}
         </div>
         <div className="dialog-actions">
           {current && (
