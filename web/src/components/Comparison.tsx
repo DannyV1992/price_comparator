@@ -9,6 +9,7 @@ import { formatQty } from "@/lib/size";
 import { PRICESMART_ID } from "@/lib/stores";
 import type { Store } from "@/lib/search";
 import { StoreChips } from "./StoreChips";
+import { LinksPopup } from "./LinksPopup";
 import { StoreLinks, type LinkEntry } from "./StoreLinks";
 import { SubstituteDialog } from "./SubstituteDialog";
 import { Baseline } from "./Baseline";
@@ -165,6 +166,26 @@ export function Comparison() {
       };
     });
 
+  // Enlaces de un producto en cada supermercado (los reemplazos apuntan al producto que los reemplaza).
+  const linksForRow = (row: (typeof rows)[number]): LinkEntry[] =>
+    stores.map((s) => {
+      const cell = row.cells.get(s.storeId)!;
+      if (cell.status === "price") {
+        return {
+          key: String(s.storeId),
+          label: s.storeName,
+          detail: cell.offer.storeProductName ?? row.item.name,
+          price: formatPrice(cellPrice(cell)),
+          url: cell.offer.url,
+        };
+      }
+      return {
+        key: String(s.storeId),
+        label: s.storeName,
+        note: cell.status === "out" ? "Agotado" : "No lo vende",
+      };
+    });
+
   const pickerItem = picker && list.find((i) => i.productId === picker.productId);
   const notes = rows.flatMap((row) =>
     stores.flatMap((s) => {
@@ -270,7 +291,14 @@ export function Comparison() {
                 {rows.map((row) => (
                   <tr key={row.item.productId}>
                     <th scope="row">
-                      {row.item.name}
+                      <LinksPopup
+                        title={row.item.name}
+                        entries={linksForRow(row)}
+                        className="store-head item-head"
+                        hint="Ver los enlaces de este producto en cada supermercado"
+                      >
+                        {row.item.name}
+                      </LinksPopup>
                       {row.item.qty > 1 && <span className="times"> ×{row.item.qty}</span>}
                       {row.outlier && <em className="warn"> · precios muy distintos, revisa</em>}
                     </th>

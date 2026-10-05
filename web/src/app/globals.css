@@ -431,6 +431,7 @@ button {
   z-index: 40;
   width: 340px;
   max-height: 60vh;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 10px 12px;
   background: var(--card);
@@ -439,6 +440,8 @@ button {
   box-shadow: 0 6px 20px rgb(0 0 0 / 20%);
   text-align: left;
   font-weight: 400;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .links-menu ul {
   list-style: none;
@@ -771,4 +774,13 @@ button {
   border: none;
   border-radius: 6px;
   box-shadow: none;
+}
+
+.links-name {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.item-head {
+  text-align: left;
 }
