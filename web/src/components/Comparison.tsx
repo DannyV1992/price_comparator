@@ -5,6 +5,8 @@ import { setSubstitute, useList } from "@/lib/list";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { buildComparison, cellPrice, isUsable, type Offer } from "@/lib/compute";
 import { formatPrice } from "@/lib/format";
+import { formatQty } from "@/lib/size";
+import { PRICESMART_ID } from "@/lib/stores";
 import type { Store } from "@/lib/search";
 import { StoreChips } from "./StoreChips";
 import { StoreLinks, type LinkEntry } from "./StoreLinks";
@@ -13,6 +15,9 @@ import { Baseline } from "./Baseline";
 import { Versus } from "./Versus";
 
 type Picker = { productId: string; storeId: number };
+
+const REAL_TOTAL_HINT =
+  "PriceSmart solo vende paquetes completos. El total de arriba suma la parte equivalente a tu lista; este es lo que costarían los paquetes enteros que tendrías que llevar.";
 
 export function Comparison() {
   const list = useList();
@@ -93,6 +98,20 @@ export function Comparison() {
     ]),
   );
   const commonMode = totalMode === "common" && stores.length > 1;
+  // PriceSmart solo vende paquetes enteros: lo que se pagaría de verdad redondea hacia arriba cuántos paquetes se llevan.
+  const packsTotal = (storeId: number, from: typeof listed) =>
+    from.reduce((sum, r) => {
+      const cell = r.cells.get(storeId);
+      if (cell?.status !== "price") return sum;
+      const packs = Math.ceil(Math.round((cell.substitute?.qty ?? 1) * r.item.qty * 10000) / 10000);
+      return sum + cell.offer.price * packs;
+    }, 0);
+  const realTotal = (storeId: number) => {
+    if (storeId !== PRICESMART_ID) return null;
+    const real = packsTotal(storeId, commonMode ? common : listed);
+    const shown = commonMode ? commonTotals.get(storeId) : stores.find((s) => s.storeId === storeId)?.total;
+    return shown != null && Math.round(real) !== Math.round(shown) ? real : null;
+  };
   const minCommon = Math.min(...commonTotals.values());
   const top = stores[0];
   // Con un orden activo, los productos sin precio en esa tienda quedan al final.
@@ -123,7 +142,8 @@ export function Comparison() {
     price === row.minPrice ? "best" : price === row.maxPrice ? "worst" : undefined;
 
   // «Nombre» o «Nombre» ×2, para los textos sobre un reemplazo.
-  const subText = (sub: { name: string; qty?: number }) => `«${sub.name}»${(sub.qty ?? 1) > 1 ? ` ×${sub.qty}` : ""}`;
+  const subText = (sub: { name: string; qty?: number }) =>
+    `«${sub.name}»${(sub.qty ?? 1) !== 1 ? ` ×${formatQty(sub.qty ?? 1)}` : ""}`;
 
   // Enlaces a los productos de la comparación en una tienda (los reemplazos apuntan al producto que los reemplaza).
   const linksFor = (storeId: number): LinkEntry[] =>
@@ -306,16 +326,24 @@ export function Comparison() {
                         formatPrice(shown)
                       );
                       if (substitute) {
+                        // Con otra cantidad (p. ej. un paquete grande), se compara el precio equivalente con el más barato de los demás.
+                        const qty = substitute.qty ?? 1;
+                        const club = s.storeId === PRICESMART_ID; // el detalle del paquete es solo para PriceSmart
+                        const packNote =
+                          club && qty !== 1
+                            ? ` Se vende a ${formatPrice(offer.price)}; el precio de la celda es la parte equivalente a tu producto (×${formatQty(qty)}), no lo que pagarías por el paquete.`
+                            : "";
                         return (
                           <td key={s.storeId} className={`replaced ${priceClass(row, shown) ?? ""}`}>
                             {price}
                             <button
                               className="cell-btn note"
                               onClick={open}
-                              title={`Reemplazado por ${subText(substitute)}`}
+                              title={`Reemplazado por ${subText(substitute)}.${packNote}`}
                             >
-                              ↻ Reemplazado{(substitute.qty ?? 1) > 1 && ` ×${substitute.qty}`}
+                              ↻ Reemplazado{qty !== 1 && ` ×${formatQty(qty)}`}
                             </button>
+                            {club && qty !== 1 && <span className="meta">Se vende a {formatPrice(offer.price)}</span>}
                           </td>
                         );
                       }
@@ -362,6 +390,11 @@ export function Comparison() {
                         className={common.length > 0 && commonTotals.get(s.storeId) === minCommon ? "best" : undefined}
                       >
                         <b>{common.length > 0 ? formatPrice(commonTotals.get(s.storeId) ?? 0) : "—"}</b>
+                        {common.length > 0 && realTotal(s.storeId) != null && (
+                          <span className="meta real-total" tabIndex={0} data-tip={REAL_TOTAL_HINT}>
+                            Pagarías realmente {formatPrice(realTotal(s.storeId)!)} ⓘ
+                          </span>
+                        )}
                       </td>
                     ) : (
                       <td key={s.storeId} className={s.covered < rows.length ? "partial" : undefined}>
@@ -375,6 +408,11 @@ export function Comparison() {
                           <span className="meta replaced-count">
                             {s.substituted} reemplazo
                             {s.substituted > 1 ? "s" : ""}
+                          </span>
+                        )}
+                        {realTotal(s.storeId) != null && (
+                          <span className="meta real-total" tabIndex={0} data-tip={REAL_TOTAL_HINT}>
+                            Pagarías realmente {formatPrice(realTotal(s.storeId)!)} ⓘ
                           </span>
                         )}
                       </td>

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import type { Substitute } from "@/lib/list";
 import { formatPrice } from "@/lib/format";
+import { equivalentQty, formatQty, formatSize, parseSize } from "@/lib/size";
+import { PRICESMART_ID } from "@/lib/stores";
 import type { StoreHit } from "@/lib/search";
 import { Thumb } from "./Thumb";
 
@@ -33,7 +35,11 @@ export function SubstituteDialog({
   onClose,
 }: Props) {
   const [query, setQuery] = useState(() => firstWords(itemName));
-  const [qty, setQty] = useState(current?.qty ?? 1); // unidades del reemplazo por cada unidad del original
+  const [qtyText, setQtyText] = useState(formatQty(current?.qty ?? 1)); // cuántos del reemplazo por cada unidad del original
+  const qty = Number(qtyText.replace(",", "."));
+  const validQty = Number.isFinite(qty) && qty > 0;
+  const club = storeId === PRICESMART_ID; // solo PriceSmart: equivalencia por tamaño y cantidades fraccionarias
+  const ownSize = club ? parseSize(itemName) : null;
   const [result, setResult] = useState<{ q: string; products: StoreHit[]; hasMore: boolean }>({
     q: "",
     products: [],
@@ -106,8 +112,8 @@ export function SubstituteDialog({
         {current && (
           <p className="meta">
             Reemplazo actual: <b>{current.name}</b>
-            {(current.qty ?? 1) > 1 && <> ×{current.qty}</>}
-            {qty !== (current.qty ?? 1) && (
+            {(current.qty ?? 1) !== 1 && <> ×{formatQty(current.qty ?? 1)}</>}
+            {validQty && qty !== (current.qty ?? 1) && (
               <>
                 {" "}
                 <button className="clear" onClick={() => onPick({ ...current, qty })}>
@@ -117,18 +123,38 @@ export function SubstituteDialog({
             )}
           </p>
         )}
-        <label className="qty-pick">
-          Unidades del reemplazo por cada «{itemName}»
-          <span className="qty">
-            <button aria-label="Quitar uno" onClick={() => setQty((q) => Math.max(1, q - 1))}>
-              −
-            </button>
-            <span>{qty}</span>
-            <button aria-label="Agregar uno" onClick={() => setQty((q) => q + 1)}>
-              +
-            </button>
-          </span>
-        </label>
+        {club ? (
+          <>
+            <label className="qty-pick">
+              Cantidad del reemplazo que necesitas en lugar de «{itemName}»
+              <input
+                className="qty-input"
+                inputMode="decimal"
+                value={qtyText}
+                onChange={(e) => setQtyText(e.target.value)}
+                aria-invalid={!validQty}
+              />
+            </label>
+            <p className="meta">
+              {ownSize
+                ? `Tu producto es de ${formatSize(ownSize)}. Cada resultado te ofrece el equivalente a ese tamaño o el paquete entero; la cantidad de arriba se usa cuando no se puede calcular el equivalente (1 es un paquete, 0,5 es medio).`
+                : "No pude leer el tamaño de tu producto, así que escribe la cantidad arriba: 1 es un paquete, 0,5 es medio paquete, 2 son dos paquetes."}
+            </p>
+          </>
+        ) : (
+          <label className="qty-pick">
+            Unidades del reemplazo por cada «{itemName}»
+            <span className="qty">
+              <button aria-label="Quitar uno" onClick={() => setQtyText(String(Math.max(1, Math.round(qty) - 1)))}>
+                −
+              </button>
+              <span>{validQty ? qty : 1}</span>
+              <button aria-label="Agregar uno" onClick={() => setQtyText(String(Math.max(1, Math.round(qty)) + 1))}>
+                +
+              </button>
+            </span>
+          </label>
+        )}
         <input
           className="search"
           type="search"
@@ -145,18 +171,52 @@ export function SubstituteDialog({
             </p>
           )}
           <ul className="results">
-            {products.map((p) => (
-              <li key={p.productId} className="card">
-                <Thumb src={p.imageUrl} alt={p.name} />
-                <div className="info">
-                  <strong>{p.name}</strong>
-                  <span className="meta">{formatPrice(p.price)}</span>
-                </div>
-                <button className="add" onClick={() => onPick({ productId: p.productId, name: p.name, qty })}>
-                  Usar este
-                </button>
-              </li>
-            ))}
+            {products.map((p) => {
+              const parsed = club ? (parseSize(p.storeProductName) ?? parseSize(p.name)) : null;
+              const eq = equivalentQty(ownSize, parsed);
+              const hasEq = eq != null && eq > 0 && eq !== 1;
+              return (
+                <li key={p.productId} className="card">
+                  <Thumb src={p.imageUrl} alt={p.name} />
+                  <div className="info">
+                    <strong>{p.name}</strong>
+                    <span className="meta">
+                      {formatPrice(p.price)}
+                      {parsed && <> · {formatSize(parsed)}</>}
+                    </span>
+                    {hasEq && (
+                      <span className="meta">
+                        Equivale a «{itemName}» de tu lista por <b>{formatPrice(p.price * eq)}</b> ({formatQty(eq)} de
+                        este paquete)
+                      </span>
+                    )}
+                  </div>
+                  <div className="pick-actions">
+                    {hasEq && (
+                      <button className="add" onClick={() => onPick({ productId: p.productId, name: p.name, qty: eq })}>
+                        Usar equivalente
+                      </button>
+                    )}
+                    {hasEq ? (
+                      <button
+                        className="secondary"
+                        onClick={() => onPick({ productId: p.productId, name: p.name, qty: 1 })}
+                      >
+                        Usar el paquete entero
+                      </button>
+                    ) : (
+                      <button
+                        className="add"
+                        disabled={!validQty}
+                        onClick={() => onPick({ productId: p.productId, name: p.name, qty })}
+                      >
+                        Usar este
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
           {!loading && result.hasMore && (
             <button className="secondary more" onClick={loadMore} disabled={loadingMore}>

@@ -345,6 +345,22 @@ button {
 .vs-summary {
   margin: 8px 0 0;
 }
+.qty-input {
+  width: 90px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  text-align: right;
+}
+.qty-input[aria-invalid="true"] {
+  border-color: #b00020;
+}
+.pick-actions {
+  display: grid;
+  gap: 6px;
+  flex: none;
+}
 .total-mode {
   max-width: 100%;
   padding: 4px 6px;
@@ -703,4 +719,33 @@ button {
     max-height: none;
     overflow-y: visible;
   }
+}
+
+.real-total {
+  position: relative;
+  cursor: help;
+}
+.real-total::after {
+  content: attr(data-tip);
+  display: none;
+  position: absolute;
+  z-index: 40;
+  right: 0;
+  bottom: calc(100% + 6px);
+  width: 260px;
+  padding: 8px 10px;
+  white-space: normal;
+  line-height: 1.35;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 20%);
+  font-size: 0.85rem;
+  font-weight: 400;
+  text-align: left;
+}
+.real-total:hover::after,
+.real-total:focus::after {
+  display: block;
 }
