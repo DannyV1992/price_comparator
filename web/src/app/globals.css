@@ -722,9 +722,13 @@ button {
 }
 
 .real-total {
-  position: relative;
   cursor: help;
 }
+.cell-tip,
+.real-total {
+  position: relative;
+}
+.cell-tip::after,
 .real-total::after {
   content: attr(data-tip);
   display: none;
@@ -745,7 +749,26 @@ button {
   font-weight: 400;
   text-align: left;
 }
+.cell-tip:hover::after,
 .real-total:hover::after,
 .real-total:focus::after {
   display: block;
+}
+
+.cell-tip {
+  display: block;
+  text-align: right;
+}
+
+/* Explicaciones de «Reemplazado» y del total de PriceSmart: cuadro oscuro con todas las letras en blanco */
+.cell-tip::after,
+.real-total::after {
+  width: max-content;
+  max-width: 420px;
+  padding: 6px 10px;
+  background: #1f2421;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  box-shadow: none;
 }

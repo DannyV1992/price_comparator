@@ -336,13 +336,11 @@ export function Comparison() {
                         return (
                           <td key={s.storeId} className={`replaced ${priceClass(row, shown) ?? ""}`}>
                             {price}
-                            <button
-                              className="cell-btn note"
-                              onClick={open}
-                              title={`Reemplazado por ${subText(substitute)}.${packNote}`}
-                            >
-                              ↻ Reemplazado{qty !== 1 && ` ×${formatQty(qty)}`}
-                            </button>
+                            <span className="cell-tip" data-tip={`Reemplazado por ${subText(substitute)}.${packNote}`}>
+                              <button className="cell-btn note" onClick={open}>
+                                ↻ Reemplazado{qty !== 1 && ` ×${formatQty(qty)}`}
+                              </button>
+                            </span>
                             {club && qty !== 1 && <span className="meta">Se vende a {formatPrice(offer.price)}</span>}
                           </td>
                         );
