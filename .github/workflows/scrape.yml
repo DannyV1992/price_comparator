@@ -127,9 +127,41 @@ jobs:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: dbt build --project-dir dbt --profiles-dir dbt
 
+  # Publica: exporta los marts de la web desde Databricks a un SQLite y sube a Turso (base de la web)
+  # solo lo que cambió. La web en línea lee esa base de Turso.
+  web:
+    name: Publicar datos de la web
+    needs: dbt
+    if: ${{ !cancelled() && needs.dbt.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-databricks.txt
+
+      - run: pip install -r requirements-databricks.txt
+
+      - name: Exportar marts de Databricks a SQLite
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: python -m sync.to_web
+
+      - name: Subir cambios a Turso (web)
+        env:
+          WEB_DATABASE_URL: ${{ secrets.WEB_DATABASE_URL }}
+          WEB_WRITE_TOKEN: ${{ secrets.WEB_WRITE_TOKEN }}
+        run: python -m sync.web_to_turso
+
   notify:
     name: Avisar por correo
-    needs: [plan, scrape, databricks, dbt]
+    needs: [plan, scrape, databricks, dbt, web]
     if: ${{ failure() }}  # solo si algún trabajo anterior falló
     runs-on: ubuntu-latest
     timeout-minutes: 5

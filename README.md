@@ -2,6 +2,16 @@
 
 Comparador de precios de supermercado. Tiendas descargadas hoy: **Más x Menos**, **Walmart** y **Maxi Pali** (VTEX), **Pequeño Mundo** (Magento GraphQL), **Automercado** (buscador Algolia) **Megasuper** y **Perimercados** (GraphQL de Instaleap) y **PriceSmart** (Bloomreach).
 
+## Resumen del proyecto
+**Plataforma de datos de precios de supermercados en Costa Rica (end-to-end).** Es un proyecto de ingeniería de datos de punta a punta, con una capa web encima.
+
+- **Ingestión:** 8 scrapers de 5 tecnologías distintas (VTEX, Magento GraphQL, Algolia, Instaleap, Bloomreach), con reintentos, detección de huecos y evasión de Cloudflare con `curl_cffi`.
+- **Orquestación y CI/CD:** GitHub Actions con matriz de tiendas, aviso por correo y reintento selectivo.
+- **Almacenamiento:** Turso como capa operativa que guarda solo los cambios de precio, y un lakehouse en Databricks (Delta) con capas `raw`, `refined`, `intermediate` y `analytics`.
+- **Transformación:** dbt con modelos, seeds y pruebas de calidad, y entity resolution (cruce de productos entre tiendas por EAN normalizado y por nombre y tamaño).
+- **Serving:** una web en Next.js con búsqueda de texto completo (FTS5) y comparación de canasta, con sincronización incremental para mantenerse dentro del plan gratis.
+- **Todo en costo cero**, y una decisión de arquitectura documentada en [docs/arquitectura.md](docs/arquitectura.md).
+
 ## Requisitos
 - Python 3.12, `httpx` y `curl_cffi` (`pip install -r requirements.txt`). Pequeño Mundo usa `curl_cffi` porque Cloudflare bloquea a `httpx` por su huella TLS.
 
@@ -72,7 +82,7 @@ cd web
 npm install
 npm run dev                    # http://localhost:3000
 ```
-Para publicarla, `WEB_DATABASE_URL` y `WEB_AUTH_TOKEN` apuntan a una base de Turso con las mismas tablas (todavía no hay paso que la cargue).
+Para publicarla, `WEB_DATABASE_URL` y `WEB_AUTH_TOKEN` (token de solo lectura) apuntan a una base de Turso aparte de la de las descargas. Esa base la mantiene el último trabajo del flujo diario (`Publicar datos de la web`): corre `sync.to_web` y luego `python -m sync.web_to_turso`, que compara `data/web.db` con lo que hay en Turso y escribe solo las filas nuevas, cambiadas o borradas (así se cuidan las escrituras del plan gratis). Secretos del repositorio: `WEB_DATABASE_URL` y `WEB_WRITE_TOKEN` (token con escritura). A mano, con esas dos variables en `.env`: `python -m sync.web_to_turso`.
 
 ## Tablas
 - `stores`: tiendas
