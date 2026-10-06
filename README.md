@@ -1,6 +1,8 @@
 # Comparador de precios
 
-Comparador de precios de supermercado. Tiendas descargadas hoy: **Más x Menos**, **Walmart** y **Maxi Pali** (VTEX), **Pequeño Mundo** (Magento GraphQL), **Automercado** (buscador Algolia) **Megasuper** y **Perimercados** (GraphQL de Instaleap) y **PriceSmart** (Bloomreach).
+Comparador de precios de supermercado. **Web publicada: https://price-comparator-self.vercel.app/**
+
+Tiendas descargadas hoy: **Más x Menos**, **Walmart** y **Maxi Pali** (VTEX), **Pequeño Mundo** (Magento GraphQL), **Automercado** (buscador Algolia) **Megasuper** y **Perimercados** (GraphQL de Instaleap) y **PriceSmart** (Bloomreach).
 
 ## Resumen del proyecto
 **Plataforma de datos de precios de supermercados en Costa Rica (end-to-end).** Es un proyecto de ingeniería de datos de punta a punta, con una capa web encima.
@@ -75,7 +77,7 @@ dbt build --project-dir dbt --profiles-dir dbt
 ```
 
 ## Web (`web/`)
-Página para armar una lista de compras y compararla entre supermercados (Next.js). Tiene búsqueda sin distinguir tildes, una tabla con el precio de cada producto en cada tienda (verde el más barato, rojo el más caro) y el total por supermercado. Si una tienda no tiene un producto, se elige un reemplazo con su cantidad; en PriceSmart, que solo vende paquetes, el total suma la parte equivalente y se muestra aparte lo que costarían los paquetes enteros. Cada producto enlaza a su página en la tienda, y la lista, los reemplazos y la configuración se guardan en el navegador (y se pueden exportar a un archivo). La web no lee de Databricks: lee un SQLite que se genera a partir de los marts `web_products` y `web_offers` (que incluyen los productos sin cruzar, como una tienda sola; sin ellos Automercado casi no aparecería).
+Publicada en [price-comparator-self.vercel.app](https://price-comparator-self.vercel.app/). Página para armar una lista de compras y compararla entre supermercados (Next.js). Tiene búsqueda sin distinguir tildes, una tabla con el precio de cada producto en cada tienda (verde el más barato, rojo el más caro) y el total por supermercado. Si una tienda no tiene un producto, se elige un reemplazo con su cantidad; en PriceSmart, que solo vende paquetes, el total suma la parte equivalente y se muestra aparte lo que costarían los paquetes enteros. Cada producto enlaza a su página en la tienda, y la lista, los reemplazos y la configuración se guardan en el navegador (y se pueden exportar a un archivo). La web no lee de Databricks: lee un SQLite que se genera a partir de los marts `web_products` y `web_offers` (que incluyen los productos sin cruzar, como una tienda sola; sin ellos Automercado casi no aparecería).
 ```
 python -m sync.to_web          # escribe data/web.db desde Databricks (necesita las variables de Databricks)
 cd web
