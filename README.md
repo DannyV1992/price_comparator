@@ -40,7 +40,7 @@ Notas por tienda:
 - **Perimercados** vende en línea por `peridomicilio.com` (`perimercados.com` es un dominio estacionado). Misma plataforma que Megasuper, tienda 133. Su `sku` es interno; el `ean` es real en ~97% de los productos y un código corto de balanza en frutas y verduras (sirve normalizarlo con cuidado al cruzar: los códigos de menos de 8 dígitos no son códigos de barras).
 
 ## Automatización (Turso + GitHub Actions)
-`.github/workflows/scrape.yml` descarga cada tienda a diario a las 09:00 (hora de Costa Rica), en un trabajo independiente por tienda, con un SQLite temporal, y lo sube a Turso con `sync/to_turso.py`. Esa sincronización se puede repetir sin duplicar datos. Cada trabajo termina en rojo si la descarga no queda en estado `ok`.
+`.github/workflows/scrape.yml` descarga cada tienda a diario a las 09:17 (hora de Costa Rica), en un trabajo independiente por tienda, con un SQLite temporal, y lo sube a Turso con `sync/to_turso.py`. Esa sincronización se puede repetir sin duplicar datos. Cada trabajo termina en rojo si la descarga no queda en estado `ok`.
 
 Secretos del repositorio (Settings → Secrets and variables → Actions): `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`.
 

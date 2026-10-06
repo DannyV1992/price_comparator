@@ -2,7 +2,7 @@ name: Descarga diaria de precios
 
 on:
   schedule:
-    - cron: "0 15 * * *"  # 15:00 UTC = 09:00 en Costa Rica
+    - cron: "17 15 * * *"  # 15:17 UTC = 09:17 en Costa Rica (evita la hora en punto, que GitHub retrasa más)
   workflow_dispatch:      # también se puede lanzar a mano desde la pestaña Actions
     inputs:
       store:
