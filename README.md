@@ -14,6 +14,47 @@ Tiendas descargadas hoy: **Más x Menos**, **Walmart** y **Maxi Pali** (VTEX), *
 - **Serving:** una web en Next.js con búsqueda de texto completo (FTS5) y comparación de canasta, con sincronización incremental para mantenerse dentro del plan gratis.
 - **Todo en costo cero**, y una decisión de arquitectura documentada en [docs/arquitectura.md](docs/arquitectura.md).
 
+<details>
+<summary><b>Flujo de punta a punta</b> (clic para ocultar o mostrar)</summary>
+
+Todo arranca solo cada día con `.github/workflows/scrape.yml`, o a mano desde Actions con **Run workflow**.
+
+```mermaid
+flowchart TD
+    CRON["⏰ GitHub Actions<br/>diario o manual"] --> PLAN["Paso 1 · Elegir tiendas<br/>.github/stores.json"]
+
+    PLAN --> SCR["Paso 2 · Descargar catálogo<br/>un trabajo por tienda, en paralelo<br/>(8 scrapers → SQLite temporal)"]
+    SCR --> TUR[("Paso 3 · Turso<br/>solo cambios de precio")]
+
+    TUR --> RAW["Paso 4 · Databricks raw<br/>copia fiel de Turso (Delta)"]
+    RAW --> DBT["Paso 5 · dbt build<br/>refined → intermediate → analytics"]
+    DBT --> MART[("Marts en analytics<br/>dim_ y fct_")]
+
+    MART --> PUB["Paso 6 · Publicar datos de la web<br/>export a SQLite + diff hacia Turso"]
+    PUB --> WEBDB[("Turso (web)<br/>solo filas nuevas o cambiadas")]
+    WEBDB --> WEB["Paso 7 · Web en Vercel<br/>Next.js: lista de compras y comparación"]
+
+    SCR -.->|algún trabajo falla| MAIL["📧 Avisar por correo<br/>trabajo y paso exacto"]
+    RAW -.-> MAIL
+    DBT -.-> MAIL
+    PUB -.-> MAIL
+```
+
+| Paso | Qué hace | Notas |
+|---|---|---|
+| **1. Elegir tiendas** | Lee `.github/stores.json` y arma la lista de tiendas a descargar. | Con **Run workflow** se puede repetir una sola tienda con el código actual. |
+| **2. Descargar catálogo** | Cada tienda corre en su propio trabajo y baja productos, categorías y precios con su scraper (`scraper/`). | Pausa de 1 a 2 s entre peticiones, reintentos ante 429/5xx y detección de huecos: la descarga queda `partial` si una categoría baja menos del 95% de lo esperado. Si una tienda falla, las demás siguen. |
+| **3. Subir a Turso** | `sync/to_turso.py` compara contra lo que ya hay y agrega una fila a `prices` solo si cambió el precio, el precio de lista o la disponibilidad. | Se puede repetir sin duplicar. El historial crece poco y cabe en el plan gratis. |
+| **4. Cargar a Databricks** | `sync/to_databricks.py` copia Turso al esquema `raw` en tablas Delta. | Un solo proceso escribe (ocho a la vez chocarían). `prices` continúa desde el mayor id y el resto se mezcla con `MERGE`. |
+| **5. Transformar con dbt** | `refined` limpia y tipa, con el EAN normalizado; `intermediate` cruza productos entre tiendas (por código de barras y por nombre y tamaño); `analytics` deja los marts para BI y la web. | Incluye pruebas de calidad (unicidad, nulos, precios no negativos, última descarga en `ok`). Los cruces dudosos van a `fct_match_review` y se resuelven en `match_overrides.csv`. |
+| **6. Publicar la web** | `sync/to_web.py` exporta `web_products` y `web_offers` a un SQLite, y `sync/web_to_turso.py` sube solo las filas nuevas, cambiadas o borradas a una base de Turso aparte. | Así se cuidan las escrituras del plan gratis. |
+| **7. Web** | La página de Next.js lee esa base de Turso y permite armar una lista de compras, compararla entre supermercados y ver el total por tienda. | Publicada en [price-comparator-self.vercel.app](https://price-comparator-self.vercel.app/). |
+| **Aviso por correo** | Si cualquier trabajo falla, `ops/notify_failure.py` manda un correo con el trabajo, el paso y los enlaces. | Para errores pasajeros, **Re-run failed jobs** repite solo lo que salió en rojo. |
+
+Cada paso depende del anterior, pero una falla no borra lo ya hecho: si Databricks o dbt fallan, las descargas y Turso quedan intactos. Los detalles de cada parte están en las secciones de abajo.
+
+</details>
+
 ## Requisitos
 - Python 3.12, `httpx` y `curl_cffi` (`pip install -r requirements.txt`). Pequeño Mundo y PriceSmart usan `curl_cffi` porque Cloudflare bloquea a `httpx` por su huella TLS.
 
