@@ -274,6 +274,7 @@ export function Comparison() {
             <table>
               <thead>
                 <tr>
+                  <th className="num">#</th>
                   <th>Producto</th>
                   {stores.map((s) => (
                     <th key={s.storeId}>
@@ -288,8 +289,9 @@ export function Comparison() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {rows.map((row, index) => (
                   <tr key={row.item.productId}>
+                    <td className="num">{index + 1}</td>
                     <th scope="row">
                       <LinksPopup
                         title={row.item.name}
@@ -299,7 +301,7 @@ export function Comparison() {
                       >
                         {row.item.name}
                       </LinksPopup>
-                      {row.item.qty > 1 && <span className="times"> ×{row.item.qty}</span>}
+                      {row.item.qty > 1 && <span className="times"> (×{row.item.qty})</span>}
                       {row.outlier && <em className="warn"> · precios muy distintos, revisa</em>}
                     </th>
                     {stores.map((s) => {
@@ -341,6 +343,9 @@ export function Comparison() {
                       }
                       const { offer, substitute } = cell;
                       const shown = cellPrice(cell);
+                      // Con varias unidades, la celda muestra el precio por la cantidad (lo que suma el total) y, debajo, el de una.
+                      const lineTotal = shown * row.item.qty;
+                      const unitNote = row.item.qty > 1 && <span className="meta">{formatPrice(shown)} c/u</span>;
                       const price = offer.url ? (
                         <a
                           href={offer.url}
@@ -348,10 +353,10 @@ export function Comparison() {
                           rel="noreferrer"
                           title={offer.storeProductName ?? undefined}
                         >
-                          {formatPrice(shown)}
+                          {formatPrice(lineTotal)}
                         </a>
                       ) : (
-                        formatPrice(shown)
+                        formatPrice(lineTotal)
                       );
                       if (substitute) {
                         // Con otra cantidad (p. ej. un paquete grande), se compara el precio equivalente con el más barato de los demás.
@@ -364,6 +369,7 @@ export function Comparison() {
                         return (
                           <td key={s.storeId} className={`replaced ${priceClass(row, shown) ?? ""}`}>
                             {price}
+                            {unitNote}
                             <span className="cell-tip" data-tip={`Reemplazado por ${subText(substitute)}.${packNote}`}>
                               <button className="cell-btn note" onClick={open}>
                                 ↻ Reemplazado{qty !== 1 && ` ×${formatQty(qty)}`}
@@ -376,6 +382,7 @@ export function Comparison() {
                       return (
                         <td key={s.storeId} className={priceClass(row, shown)}>
                           {price}
+                          {unitNote}
                           <button
                             className="cell-btn swap"
                             onClick={open}
@@ -391,7 +398,7 @@ export function Comparison() {
               </tbody>
               <tfoot>
                 <tr>
-                  <th scope="row">
+                  <th scope="row" colSpan={2}>
                     {stores.length > 1 ? (
                       <select
                         className="total-mode"

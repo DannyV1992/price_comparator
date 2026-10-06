@@ -255,6 +255,14 @@ button {
   min-width: 220px;
   font-weight: 500;
 }
+.compare th.num,
+.compare td.num {
+  text-align: center;
+  min-width: 0;
+  width: 1%;
+  color: var(--muted);
+  font-weight: 400;
+}
 .compare tfoot th,
 .compare tfoot td {
   border-top: 2px solid var(--text);
