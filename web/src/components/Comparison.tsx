@@ -275,7 +275,7 @@ export function Comparison() {
               <thead>
                 <tr>
                   <th className="num">#</th>
-                  <th>Producto</th>
+                  <th className="name">Producto</th>
                   {stores.map((s) => (
                     <th key={s.storeId}>
                       <StoreLinks

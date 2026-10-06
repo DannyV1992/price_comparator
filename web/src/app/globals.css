@@ -249,6 +249,7 @@ button {
   background: var(--bg);
 }
 .compare th:first-child,
+.compare thead th.name,
 .compare tbody th {
   text-align: left;
   white-space: normal;
