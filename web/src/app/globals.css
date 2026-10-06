@@ -264,6 +264,10 @@ button {
   color: var(--muted);
   font-weight: 400;
 }
+.compare thead th.num,
+.compare thead th.name {
+  font-weight: 600;
+}
 .compare tfoot th,
 .compare tfoot td {
   border-top: 2px solid var(--text);
@@ -792,4 +796,5 @@ button {
 }
 .item-head {
   text-align: left;
+  font-weight: 400;
 }
