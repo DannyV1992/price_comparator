@@ -11,7 +11,7 @@ flowchart LR
         O[Otras APIs<br/>Pequeño Mundo · Automercado · PriceSmart]
     end
 
-    subgraph GHA["GitHub Actions · diario 03:00 CR"]
+    subgraph GHA["GitHub Actions · diario 09:17 CR"]
         S[Scrapers Python<br/>un trabajo por tienda]
         L[Carga a Databricks]
         D[dbt build]

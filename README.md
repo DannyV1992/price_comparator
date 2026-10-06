@@ -13,7 +13,7 @@ Comparador de precios de supermercado. Tiendas descargadas hoy: **Más x Menos**
 - **Todo en costo cero**, y una decisión de arquitectura documentada en [docs/arquitectura.md](docs/arquitectura.md).
 
 ## Requisitos
-- Python 3.12, `httpx` y `curl_cffi` (`pip install -r requirements.txt`). Pequeño Mundo usa `curl_cffi` porque Cloudflare bloquea a `httpx` por su huella TLS.
+- Python 3.12, `httpx` y `curl_cffi` (`pip install -r requirements.txt`). Pequeño Mundo y PriceSmart usan `curl_cffi` porque Cloudflare bloquea a `httpx` por su huella TLS.
 
 ## Uso
 ```
@@ -28,7 +28,7 @@ python scraper/instaleap.py megasuper                  # Megasuper completo (~1 
 python scraper/instaleap.py perimercados               # Perimercados (peridomicilio.com, ~1 min)
 python scraper/pricesmart.py                           # PriceSmart completo (~5 min)
 ```
-Todo queda en `data/comparador.db` (no se sube a git). Cada ejecución agrega un precio nuevo por producto, así se arma el historial.
+Al correr a mano, todo queda en `data/comparador.db` (no se sube a git) y cada ejecución agrega una fila de precio por producto. Ese SQLite es solo el paso intermedio: el historial real vive en Turso (ver abajo), porque en GitHub Actions cada descarga arranca con un SQLite temporal que se descarta al terminar.
 
 Diferencias de Pequeño Mundo: no publica código de barras (`ean` queda vacío), la marca se saca de la descripción, no publica la cantidad en existencia (`available_qty` es 1 si hay y 0 si está agotado) y un agotado conserva su precio real (en Más x Menos aparece como 0).
 
@@ -75,7 +75,7 @@ dbt build --project-dir dbt --profiles-dir dbt
 ```
 
 ## Web (`web/`)
-Página para armar una lista de compras eligiendo cada producto (Next.js). Por ahora: búsqueda sin distinguir tildes y una lista guardada en el navegador. La web no lee de Databricks: lee un SQLite que se genera a partir de los marts `web_products` y `web_offers` (que incluyen los productos sin cruzar, como una tienda sola; sin ellos Automercado casi no aparecería).
+Página para armar una lista de compras y compararla entre supermercados (Next.js). Tiene búsqueda sin distinguir tildes, una tabla con el precio de cada producto en cada tienda (verde el más barato, rojo el más caro) y el total por supermercado. Si una tienda no tiene un producto, se elige un reemplazo con su cantidad; en PriceSmart, que solo vende paquetes, el total suma la parte equivalente y se muestra aparte lo que costarían los paquetes enteros. Cada producto enlaza a su página en la tienda, y la lista, los reemplazos y la configuración se guardan en el navegador (y se pueden exportar a un archivo). La web no lee de Databricks: lee un SQLite que se genera a partir de los marts `web_products` y `web_offers` (que incluyen los productos sin cruzar, como una tienda sola; sin ellos Automercado casi no aparecería).
 ```
 python -m sync.to_web          # escribe data/web.db desde Databricks (necesita las variables de Databricks)
 cd web
